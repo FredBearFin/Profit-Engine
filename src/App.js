@@ -26,12 +26,13 @@ import {
 // PASTE YOUR FIREBASE CONFIGURATION HERE
 // =================================================================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyB4z-JrEmvqtzshnsvEO_wTWWQ-eId5MOo",
+  authDomain: "dropship-profit-calculator.firebaseapp.com",
+  projectId: "dropship-profit-calculator",
+  storageBucket: "dropship-profit-calculator.firebasestorage.app",
+  messagingSenderId: "12386923384",
+  appId: "1:12386923384:web:38891fd0cd2cb12badce8d",
+  measurementId: "G-5X8WP42KQ8"
 };
 // =================================================================================
 
