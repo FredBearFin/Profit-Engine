@@ -74,10 +74,11 @@ const createBlankProduct = () => ({
     ship: 3.50,
     pack: 0.50,
     feePct: 15,
-    feeFlat: 0.30,
+    feeFlat: 0.00,
     price: 19.99,
     minPrice: 10,
     maxPrice: 50,
+    competitorPrice: 0,
     createdAt: serverTimestamp()
 });
 
@@ -154,7 +155,28 @@ export default function App() {
 
   const handleProductChange = (field, value) => {
     if (!selectedProductData) return;
-    const updatedProduct = { ...selectedProductData, [field]: value };
+
+    const updatedFields = { [field]: value };
+    const costFields = ['landed', 'ship', 'pack', 'feePct', 'feeFlat'];
+
+    if (costFields.includes(field)) {
+        const currentProduct = { ...selectedProductData, ...updatedFields };
+        const { landed, ship, pack, feePct, feeFlat } = currentProduct;
+        
+        const totalCost = landed + ship + pack;
+        const f = feePct / 100;
+        const targetMargin = 0.33;
+        const denom = 1 - f - targetMargin;
+
+        if (denom > 0) {
+            const suggestedPrice = roundNickel((totalCost + feeFlat) / denom);
+            updatedFields.price = suggestedPrice;
+            updatedFields.minPrice = Math.round(suggestedPrice * 0.5);
+            updatedFields.maxPrice = Math.round(suggestedPrice * 2);
+        }
+    }
+
+    const updatedProduct = { ...selectedProductData, ...updatedFields };
     setProducts(products.map(p => p.id === selectedProductId ? updatedProduct : p));
   };
   
@@ -187,13 +209,20 @@ export default function App() {
           )}
           <div className={user ? "lg:col-span-3" : "lg:col-span-4"}>
              {selectedProductData ? (
-                <Calculator 
-                  product={selectedProductData} 
-                  onProductChange={handleProductChange}
-                  onPriceChange={handlePriceChange}
-                  onSave={handleSaveProduct}
-                  user={user}
-                />
+                <div className="space-y-6">
+                    <Calculator 
+                      product={selectedProductData} 
+                      onProductChange={handleProductChange}
+                      onPriceChange={handlePriceChange}
+                      onSave={handleSaveProduct}
+                      user={user}
+                    />
+                    <StrategyPanel 
+                      product={selectedProductData}
+                      onPriceChange={handlePriceChange}
+                      onProductChange={handleProductChange}
+                    />
+                </div>
              ) : (
                 <div className="bg-white p-6 rounded-xl shadow-md text-center">
                     <p>Select a product or add a new one.</p>
@@ -264,63 +293,144 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
 }
 
 function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
-    const { landed, ship, pack, feePct, feeFlat, price } = product;
-    const totalCost = landed + ship + pack;
-    const fees = price * (feePct / 100) + feeFlat;
-    const profit = price - fees - totalCost;
-    const margin = price > 0 ? (profit / price) * 100 : 0;
-    const be = (1 - feePct / 100) > 0 ? (totalCost + feeFlat) / (1 - feePct / 100) : Infinity;
-
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-md">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} />
-                    <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
-                    <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
-                    <Input id="pack" label="Packaging Cost" type="number" value={product.pack} onChange={e => onProductChange('pack', parseFloat(e.target.value) || 0)} icon="$" />
-                    <Input id="feePct" label="Marketplace Fee" type="number" value={product.feePct} onChange={e => onProductChange('feePct', parseFloat(e.target.value) || 0)} icon="%" />
-                    <Input id="feeFlat" label="Flat Fee" type="number" value={product.feeFlat} onChange={e => onProductChange('feeFlat', parseFloat(e.target.value) || 0)} icon="$" />
-                </div>
-                <hr className="my-6 border-slate-200" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                    <div>
-                        <div className="text-center">
-                            <label className="text-sm font-medium text-slate-600">Sale Price</label>
-                            <div className="text-4xl font-bold text-teal-700 mt-1">{fmtUSD(product.price)}</div>
-                        </div>
-                        <div className="flex items-center gap-4 mt-4">
-                            <button onClick={() => onPriceChange(product.price - 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">-</button>
-                            <input type="range" min={product.minPrice} max={product.maxPrice} step="0.05" value={product.price} onChange={e => onPriceChange(parseFloat(e.target.value))} className="w-full" />
-                            <button onClick={() => onPriceChange(product.price + 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">+</button>
-                        </div>
+        <div className="bg-white p-6 rounded-xl shadow-md">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} />
+                <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
+                <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
+                <Input id="pack" label="Packaging Cost" type="number" value={product.pack} onChange={e => onProductChange('pack', parseFloat(e.target.value) || 0)} icon="$" />
+                <Input id="feePct" label="Marketplace Fee" type="number" value={product.feePct} onChange={e => onProductChange('feePct', parseFloat(e.target.value) || 0)} icon="%" />
+                <Input id="feeFlat" label="Flat Fee" type="number" value={product.feeFlat} onChange={e => onProductChange('feeFlat', parseFloat(e.target.value) || 0)} icon="$" />
+            </div>
+            <hr className="my-6 border-slate-200" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                <div>
+                    <div className="text-center">
+                        <label className="text-sm font-medium text-slate-600">Sale Price</label>
+                        <div className="text-4xl font-bold text-teal-700 mt-1">{fmtUSD(product.price)}</div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input id="minPrice" label="Min Price" type="number" value={product.minPrice} onChange={e => onProductChange('minPrice', parseFloat(e.target.value) || 0)} icon="$" />
-                        <Input id="maxPrice" label="Max Price" type="number" value={product.maxPrice} onChange={e => onProductChange('maxPrice', parseFloat(e.target.value) || 0)} icon="$" />
+                    <div className="flex items-center gap-4 mt-4">
+                        <button onClick={() => onPriceChange(product.price - 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">-</button>
+                        <input type="range" min={product.minPrice} max={product.maxPrice} step="0.05" value={product.price} onChange={e => onPriceChange(parseFloat(e.target.value))} className="w-full" />
+                        <button onClick={() => onPriceChange(product.price + 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">+</button>
                     </div>
                 </div>
-                <div className="mt-6 flex justify-end">
-                    <button onClick={onSave} className="flex items-center gap-2 font-semibold bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors shadow">
-                        <Save className="w-5 h-5" />
-                        {user ? 'Save Changes' : 'Save & Sign Up'}
-                    </button>
+                <div className="grid grid-cols-2 gap-4">
+                    <Input id="minPrice" label="Min Price" type="number" value={product.minPrice} onChange={e => onProductChange('minPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
+                    <Input id="maxPrice" label="Max Price" type="number" value={product.maxPrice} onChange={e => onProductChange('maxPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
                 </div>
             </div>
-            <StatCard label="Net Profit" value={fmtUSD(profit)} isPositive={profit >= 0} />
-            <StatCard label="Net Margin" value={`${margin.toFixed(1)}%`} isPositive={margin >= 0} />
-            <StatCard label="Breakeven Price" value={fmtUSD(be)} />
+            <div className="mt-6 flex justify-end">
+                <button onClick={onSave} className="flex items-center gap-2 font-semibold bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors shadow">
+                    <Save className="w-5 h-5" />
+                    {user ? 'Save Changes' : 'Save & Sign Up'}
+                </button>
+            </div>
         </div>
     );
 }
 
-function Input({ id, label, type = "text", value, onChange, icon }) {
+function StrategyPanel({ product, onPriceChange, onProductChange }) {
+    const { landed, ship, pack, feePct, feeFlat, price, competitorPrice } = product;
+    const totalCost = landed + ship + pack;
+    
+    const calculateProfit = (p) => p - totalCost - (p * (feePct / 100) + feeFlat);
+    const profit = calculateProfit(price);
+
+    const priceForMargin = (targetMargin) => {
+      const f = feePct / 100;
+      const denom = 1 - f - targetMargin;
+      if (denom <= 0) return NaN;
+      return roundNickel((totalCost + feeFlat) / denom);
+    };
+
+    const handleMarginButtonClick = (margin) => {
+        const targetPrice = priceForMargin(margin);
+        if(!isNaN(targetPrice)) {
+            onPriceChange(targetPrice);
+        }
+    };
+    
+    const margins = [0.10, 0.15, 0.20, 0.25, 0.33, 0.40, 0.50, 0.75];
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-md">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Quick Targets */}
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-1">Quick Targets</h3>
+                        <p className="text-sm text-slate-500 mb-4">Instantly set price for a target margin.</p>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                            {margins.map(margin => (
+                                <button key={margin} onClick={() => handleMarginButtonClick(margin)} className="text-sm font-semibold p-3 bg-slate-100 rounded-lg hover:bg-teal-100 hover:text-teal-800 transition-colors">
+                                    {Math.round(margin * 100)}%
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Strategic Analysis */}
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-1">Strategic Analysis</h3>
+                        <p className="text-sm text-slate-500 mb-4">Analyze and act on competitor pricing.</p>
+                        <Input id="competitorPrice" label="Competitor's Price" type="number" value={competitorPrice || ''} onChange={e => onProductChange('competitorPrice', parseFloat(e.target.value) || 0)} icon="$" />
+                        {competitorPrice > 0 && (
+                            <div className="mt-4 space-y-3">
+                                <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-700">
+                                    You are currently <span className={`font-bold ${price < competitorPrice ? 'text-green-600' : 'text-red-600'}`}>{fmtUSD(Math.abs(price - competitorPrice))} {price < competitorPrice ? 'below' : 'above'}</span> them.
+                                </div>
+                                <div className="space-y-2">
+                                    <StrategyButton
+                                        label="Price to Beat"
+                                        newPrice={competitorPrice - 0.50}
+                                        profit={calculateProfit(competitorPrice - 0.50)}
+                                        onClick={onPriceChange}
+                                    />
+                                    <StrategyButton
+                                        label="Price to Match"
+                                        newPrice={competitorPrice}
+                                        profit={calculateProfit(competitorPrice)}
+                                        onClick={onPriceChange}
+                                    />
+                                    <StrategyButton
+                                        label="Price for Premium"
+                                        newPrice={competitorPrice * 1.05}
+                                        profit={calculateProfit(competitorPrice * 1.05)}
+                                        onClick={onPriceChange}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+            <StatCard label="Net Profit" value={fmtUSD(profit)} isPositive={profit >= 0} />
+            <StatCard label="Net Margin" value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`} isPositive={profit >= 0} />
+            <StatCard label="Breakeven Price" value={fmtUSD((1 - feePct / 100) > 0 ? (totalCost + feeFlat) / (1 - feePct / 100) : Infinity)} />
+        </div>
+    );
+}
+
+function StrategyButton({ label, newPrice, profit, onClick }) {
+    const roundedPrice = roundNickel(newPrice);
+    return (
+        <button onClick={() => onClick(roundedPrice)} className="w-full text-left p-3 bg-slate-100 rounded-lg hover:bg-teal-100 hover:text-teal-800 transition-colors">
+            <div className="font-semibold">{label}</div>
+            <div className="text-xs text-slate-600">
+                Set Price: <span className="font-bold">{fmtUSD(roundedPrice)}</span> | Profit: <span className="font-bold">{fmtUSD(profit)}</span>
+            </div>
+        </button>
+    );
+}
+
+function Input({ id, label, type = "text", value, onChange, icon, step }) {
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
       <div className="relative">
         {icon && <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">{icon}</span>}
-        <input type={type} id={id} value={value} onChange={onChange} step={type === 'number' ? '0.01' : undefined} className={`w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 transition ${icon ? 'pl-8' : 'pl-3'}`} />
+        <input type={type} id={id} value={value} onChange={onChange} step={step || (type === 'number' ? '0.01' : undefined)} className={`w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 transition ${icon ? 'pl-8' : 'pl-3'}`} />
       </div>
     </div>
   );
@@ -370,7 +480,7 @@ function AuthModal({ onClose }) {
                     <button type="submit" className="w-full font-semibold bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition-colors shadow">{isLogin ? 'Log In' : 'Sign Up'}</button>
                 </form>
                 <p className="text-center text-sm text-slate-500 mt-6">
-                    {isLogin ? "Don't have an account?" : "Already have an account?"}
+                    {isLogin ? "Don't have an account?  Make one!" : "Already have an account? Welcome Back!"}
                     <button onClick={() => setIsLogin(!isLogin)} className="font-semibold text-teal-600 hover:underline ml-1">{isLogin ? 'Sign Up' : 'Log In'}</button>
                 </p>
             </div>
