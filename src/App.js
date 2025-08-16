@@ -1,5 +1,5 @@
 // Import React and hooks. useRef is included for future use if needed.
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // --- Firebase imports for authentication and Firestore database ---
 import { initializeApp } from "firebase/app";
