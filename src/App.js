@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-// --- Official Firebase Imports ---
+// Import React and hooks. useRef is included for future use if needed.
+import React, { useState, useEffect, useRef } from 'react';
+
+// --- Firebase imports for authentication and Firestore database ---
 import { initializeApp } from "firebase/app";
 import { 
     getAuth, 
@@ -21,10 +23,7 @@ import {
     orderBy
 } from "firebase/firestore";
 
-
-// =================================================================================
-// PASTE YOUR FIREBASE CONFIGURATION HERE
-// =================================================================================
+// --- Your Firebase project configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyB4z-JrEmvqtzshnsvEO_wTWWQ-eId5MOo",
   authDomain: "dropship-profit-calculator.firebaseapp.com",
@@ -34,16 +33,13 @@ const firebaseConfig = {
   appId: "1:12386923384:web:38891fd0cd2cb12badce8d",
   measurementId: "G-5X8WP42KQ8"
 };
-// =================================================================================
 
-
-// --- Initialize Firebase ---
+// --- Initialize Firebase app, authentication, and Firestore database ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-
-// --- ICONS ---
+// --- SVG Icon Components for UI buttons ---
 const PlusCircle = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
 );
@@ -63,11 +59,12 @@ const Save = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
 );
 
-// --- UTILITY FUNCTIONS ---
+// --- Utility functions for formatting and calculations ---
 const fmtUSD = (n) => (isFinite(n) ? n : 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const roundNickel = (n) => Number((Math.round(n / 0.05) * 0.05).toFixed(2));
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
+// --- Function to create a blank product object with default values ---
 const createBlankProduct = () => ({
     name: 'Untitled Product',
     landed: 5.00,
@@ -82,21 +79,25 @@ const createBlankProduct = () => ({
     createdAt: serverTimestamp()
 });
 
-// --- MAIN APP COMPONENT ---
+// --- Main App Component ---
 export default function App() {
+  // State for user authentication, product list, selected product, modal, and loading
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Find the currently selected product object
   const selectedProductData = products.find(p => p.id === selectedProductId);
 
+  // --- Listen for authentication changes and load products ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setIsLoading(true);
       setUser(currentUser);
       if (currentUser) {
+        // If logged in, load products from Firestore
         const productsCollection = collection(db, 'users', currentUser.uid, 'products');
         const q = query(productsCollection, orderBy("createdAt", "desc"));
         const productSnapshot = await getDocs(q);
@@ -106,12 +107,14 @@ export default function App() {
           setProducts(userProducts);
           setSelectedProductId(userProducts[0].id);
         } else {
+          // If no products, create a blank one
           const newProductData = createBlankProduct();
           const docRef = await addDoc(productsCollection, newProductData);
           setProducts([{ id: docRef.id, ...newProductData }]);
           setSelectedProductId(docRef.id);
         }
       } else {
+        // If not logged in, use a single anonymous product
         const anonymousProduct = { id: 'anonymous', ...createBlankProduct() };
         setProducts([anonymousProduct]);
         setSelectedProductId('anonymous');
@@ -121,6 +124,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Save product changes to Firestore ---
   const handleSaveProduct = async () => {
     if (!user) {
       setAuthModalOpen(true);
@@ -134,6 +138,7 @@ export default function App() {
     alert('Product Saved!');
   };
 
+  // --- Add a new product for the user ---
   const handleAddNewProduct = async () => {
     if (!user) return;
     const productsCollection = collection(db, 'users', user.uid, 'products');
@@ -144,6 +149,7 @@ export default function App() {
     setSelectedProductId(docRef.id);
   };
 
+  // --- Delete a product for the user ---
   const handleDeleteProduct = async (productId) => {
     if (!user || products.length <= 1) return;
     const productDoc = doc(db, 'users', user.uid, 'products', productId);
@@ -153,12 +159,14 @@ export default function App() {
     setSelectedProductId(newProducts[0]?.id || null);
   };
 
+  // --- Handle changes to product fields ---
   const handleProductChange = (field, value) => {
     if (!selectedProductData) return;
 
     const updatedFields = { [field]: value };
     const costFields = ['landed', 'ship', 'pack', 'feePct', 'feeFlat'];
 
+    // If a cost field changes, recalculate suggested price and min/max
     if (costFields.includes(field)) {
         const currentProduct = { ...selectedProductData, ...updatedFields };
         const { landed, ship, pack, feePct, feeFlat } = currentProduct;
@@ -176,28 +184,34 @@ export default function App() {
         }
     }
 
+    // Update product in state
     const updatedProduct = { ...selectedProductData, ...updatedFields };
     setProducts(products.map(p => p.id === selectedProductId ? updatedProduct : p));
   };
   
+  // --- Handle price changes (from slider, buttons, etc) ---
   const handlePriceChange = (newPrice) => {
       if (!selectedProductData) return;
       const min = selectedProductData.minPrice;
       const max = selectedProductData.maxPrice;
+      // Clamp and round price before updating
       const clampedPrice = roundNickel(clamp(newPrice, min, max));
       handleProductChange('price', clampedPrice);
   }
 
+  // --- Show loading spinner while fetching data ---
   if (isLoading) {
     return <div className="w-full h-screen flex items-center justify-center bg-slate-100"><p>Loading Profit Engine...</p></div>
   }
 
+  // --- Main UI layout ---
   return (
     <div className="bg-slate-100 min-h-screen font-sans">
       <Header user={user} onLoginClick={() => setAuthModalOpen(true)} />
       
       <main className="p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar only shown for logged-in users */}
           {user && (
             <ProductSidebar 
               products={products}
@@ -210,6 +224,7 @@ export default function App() {
           <div className={user ? "lg:col-span-3" : "lg:col-span-4"}>
              {selectedProductData ? (
                 <div className="space-y-6">
+                    {/* Calculator and StrategyPanel for selected product */}
                     <Calculator 
                       product={selectedProductData} 
                       onProductChange={handleProductChange}
@@ -231,21 +246,24 @@ export default function App() {
           </div>
         </div>
       </main>
+      {/* Show authentication modal if needed */}
       {isAuthModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
     </div>
   );
 }
 
-// --- SUB-COMPONENTS ---
+// --- Header component: shows app title and login/logout buttons ---
 function Header({ user, onLoginClick }) {
   return (
     <header className="bg-white shadow-sm p-4 flex justify-between items-center">
       <div className="flex items-center gap-3">
+        {/* App logo */}
         <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 256 256" className="text-teal-600"><path fill="currentColor" d="M244 56.7a15.9 15.9 0 0 0-10.5-4.4c-2.4-.2-111.2-1-111.2-1s-108.8.8-111.2 1a15.9 15.9 0 0 0-10.5 4.4A16.1 16.1 0 0 0 12 67.3v121.4a16.1 16.1 0 0 0 8.6 14.6a15.9 15.9 0 0 0 15.4 0l106.2-53.1l106.2 53.1a15.9 15.9 0 0 0 15.4 0a16.1 16.1 0 0 0 8.6-14.6V67.3a16.1 16.1 0 0 0-8-10.6ZM128 140.5L28 192V64l100 50v26.5Zm100 51.5L132 142.8V114l100-50v128Z"/></svg>
         <h1 className="text-xl md:text-2xl font-bold text-slate-800">Profit Engine</h1>
       </div>
       <div>
         {user ? (
+          // Show logout button if logged in
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-600 hidden md:block">Welcome, {user.email}</span>
             <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-800 transition-colors">
@@ -254,6 +272,7 @@ function Header({ user, onLoginClick }) {
             </button>
           </div>
         ) : (
+          // Show login/signup button if not logged in
           <button onClick={onLoginClick} className="flex items-center gap-2 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors shadow">
             <LogIn className="w-5 h-5" />
             Login / Sign Up
@@ -264,6 +283,7 @@ function Header({ user, onLoginClick }) {
   );
 }
 
+// --- Sidebar for product selection and management ---
 function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddProduct, onDeleteProduct }) {
   return (
     <aside className="lg:col-span-1 bg-white p-4 rounded-xl shadow-md">
@@ -292,35 +312,35 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
   );
 }
 
-// --- PASTE THIS ENTIRE UPDATED COMPONENT INTO src/App.js ---
-
+// --- Calculator component: handles product pricing and cost inputs ---
+// --- The Sale Price input is now fixed to allow free typing, only clamping on blur or Enter ---
 function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
-    // Local state for sale price input
+    // Local state for sale price input field, so user can type freely
     const [salePriceInput, setSalePriceInput] = useState(product.price);
 
-    // Sync local state when product changes
+    // Whenever product.price changes (from outside), update local input state
     useEffect(() => {
         setSalePriceInput(product.price);
     }, [product.price]);
 
-    // Handle input change (free typing)
+    // Update local state as user types (does NOT update product yet)
     const handleSalePriceInputChange = (e) => {
         setSalePriceInput(e.target.value);
     };
 
-    // Validate and apply on blur or Enter
+    // When input loses focus or user presses Enter, clamp and round, then update product
     const handleSalePriceInputCommit = () => {
         let val = parseFloat(salePriceInput);
         if (isNaN(val)) val = product.minPrice;
-        // Clamp and round
+        // Clamp and round to nearest nickel
         const min = product.minPrice;
         const max = product.maxPrice;
         const clampedPrice = roundNickel(clamp(val, min, max));
-        setSalePriceInput(clampedPrice);
-        onPriceChange(clampedPrice);
+        setSalePriceInput(clampedPrice); // Update local input
+        onPriceChange(clampedPrice);     // Update product
     };
 
-    // Handle Enter key
+    // If user presses Enter, commit the value
     const handleSalePriceInputKeyDown = (e) => {
         if (e.key === 'Enter') {
             handleSalePriceInputCommit();
@@ -330,6 +350,7 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
     return (
         <div className="bg-white p-6 rounded-xl shadow-md">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Product name and cost inputs */}
                 <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} />
                 <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
@@ -340,7 +361,7 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
             <hr className="my-6 border-slate-200" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                 <div>
-                    {/* === MODIFIED SECTION START === */}
+                    {/* --- Sale Price input section --- */}
                     <div className="text-center">
                         <label htmlFor="salePriceInput" className="text-sm font-medium text-slate-600">Sale Price</label>
                         <div className="mt-1 relative">
@@ -357,18 +378,20 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
                             />
                         </div>
                     </div>
-                    {/* === MODIFIED SECTION END === */}
+                    {/* --- Sale Price slider and +/- buttons --- */}
                     <div className="flex items-center gap-4 mt-4">
                         <button onClick={() => onPriceChange(product.price - 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">-</button>
                         <input type="range" min={product.minPrice} max={product.maxPrice} step="0.05" value={product.price} onChange={e => onPriceChange(parseFloat(e.target.value))} className="w-full" />
                         <button onClick={() => onPriceChange(product.price + 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">+</button>
                     </div>
                 </div>
+                {/* Min/Max price inputs */}
                 <div className="grid grid-cols-2 gap-4">
                     <Input id="minPrice" label="Min Price" type="number" value={product.minPrice} onChange={e => onProductChange('minPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
                     <Input id="maxPrice" label="Max Price" type="number" value={product.maxPrice} onChange={e => onProductChange('maxPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
                 </div>
             </div>
+            {/* Save button */}
             <div className="mt-6 flex justify-end">
                 <button onClick={onSave} className="flex items-center gap-2 font-semibold bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors shadow">
                     <Save className="w-5 h-5" />
@@ -379,13 +402,17 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
     );
 }
 
+// --- StrategyPanel: margin targets, competitor analysis, profit stats ---
 function StrategyPanel({ product, onPriceChange, onProductChange }) {
+    // Destructure product fields for calculations
     const { landed, ship, pack, feePct, feeFlat, price, competitorPrice } = product;
     const totalCost = landed + ship + pack;
     
+    // Calculate profit for a given price
     const calculateProfit = (p) => p - totalCost - (p * (feePct / 100) + feeFlat);
     const profit = calculateProfit(price);
 
+    // Calculate price for a target margin
     const priceForMargin = (targetMargin) => {
       const f = feePct / 100;
       const denom = 1 - f - targetMargin;
@@ -393,6 +420,7 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
       return roundNickel((totalCost + feeFlat) / denom);
     };
 
+    // When margin button is clicked, set price for that margin
     const handleMarginButtonClick = (margin) => {
         const targetPrice = priceForMargin(margin);
         if(!isNaN(targetPrice)) {
@@ -400,13 +428,14 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
         }
     };
     
+    // List of margin targets
     const margins = [0.10, 0.15, 0.20, 0.25, 0.33, 0.40, 0.50, 0.75];
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-md">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Quick Targets */}
+                    {/* Quick margin target buttons */}
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-1">Quick Targets</h3>
                         <p className="text-sm text-slate-500 mb-4">Instantly set price for a target margin.</p>
@@ -418,7 +447,7 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
                             ))}
                         </div>
                     </div>
-                    {/* Strategic Analysis */}
+                    {/* Competitor price analysis */}
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-1">Strategic Analysis</h3>
                         <p className="text-sm text-slate-500 mb-4">Analyze and act on competitor pricing.</p>
@@ -453,6 +482,7 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
                     </div>
                 </div>
             </div>
+            {/* Profit stats cards */}
             <StatCard label="Net Profit" value={fmtUSD(profit)} isPositive={profit >= 0} />
             <StatCard label="Net Margin" value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`} isPositive={profit >= 0} />
             <StatCard label="Breakeven Price" value={fmtUSD((1 - feePct / 100) > 0 ? (totalCost + feeFlat) / (1 - feePct / 100) : Infinity)} />
@@ -460,6 +490,7 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
     );
 }
 
+// --- Button for strategy actions (beat, match, premium) ---
 function StrategyButton({ label, newPrice, profit, onClick }) {
     const roundedPrice = roundNickel(newPrice);
     return (
@@ -472,6 +503,7 @@ function StrategyButton({ label, newPrice, profit, onClick }) {
     );
 }
 
+// --- Input component for all form fields ---
 function Input({ id, label, type = "text", value, onChange, icon, step }) {
   return (
     <div>
@@ -484,6 +516,7 @@ function Input({ id, label, type = "text", value, onChange, icon, step }) {
   );
 }
 
+// --- StatCard: shows profit, margin, breakeven stats ---
 function StatCard({ label, value, isPositive }) {
     const valueColor = isPositive === true ? 'text-green-600' : isPositive === false ? 'text-red-500' : 'text-slate-800';
     return (
@@ -494,12 +527,15 @@ function StatCard({ label, value, isPositive }) {
     );
 }
 
+// --- AuthModal: handles login and signup ---
 function AuthModal({ onClose }) {
+    // State for email, password, login/signup toggle, and error messages
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [error, setError] = useState('');
 
+    // Handle form submit for login or signup
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
@@ -535,3 +571,5 @@ function AuthModal({ onClose }) {
         </div>
     );
 }
+
+// --- End of file ---
