@@ -1,5 +1,5 @@
 // Import React and hooks. useRef is included for future use if needed.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // --- Firebase imports for authentication and Firestore database ---
 import { initializeApp } from "firebase/app";
@@ -81,12 +81,13 @@ const createBlankProduct = () => ({
 
 // --- Main App Component ---
 export default function App() {
-  // State for user authentication, product list, selected product, modal, and loading
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  // STEP 2: Add productNameInputRef
+  const productNameInputRef = useRef(null);
 
   // Find the currently selected product object
   const selectedProductData = products.find(p => p.id === selectedProductId);
@@ -138,7 +139,7 @@ export default function App() {
     alert('Product Saved!');
   };
 
-  // --- Add a new product for the user ---
+  // --- Replace the old handleAddNewProduct function with the new one ---
   const handleAddNewProduct = async () => {
     if (!user) return;
     const productsCollection = collection(db, 'users', user.uid, 'products');
@@ -147,6 +148,12 @@ export default function App() {
     const newProduct = { id: docRef.id, ...newProductData };
     setProducts([newProduct, ...products]);
     setSelectedProductId(docRef.id);
+
+    // Focus and select the product name input after adding a new product
+    setTimeout(() => {
+      productNameInputRef.current?.focus();
+      productNameInputRef.current?.select();
+    }, 0);
   };
 
   // --- Delete a product for the user ---
@@ -231,6 +238,7 @@ export default function App() {
                       onPriceChange={handlePriceChange}
                       onSave={handleSaveProduct}
                       user={user}
+                      productNameInputRef={productNameInputRef} // Add this prop
                     />
                     <StrategyPanel 
                       product={selectedProductData}
@@ -314,7 +322,7 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
 
 // --- Calculator component: handles product pricing and cost inputs ---
 // --- The Sale Price input is now fixed to allow free typing, only clamping on blur or Enter ---
-function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
+function Calculator({ product, onProductChange, onPriceChange, onSave, user, productNameInputRef }) {
     // Local state for sale price input field, so user can type freely
     const [salePriceInput, setSalePriceInput] = useState(product.price);
 
@@ -351,7 +359,7 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
         <div className="bg-white p-6 rounded-xl shadow-md">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* Product name and cost inputs */}
-                <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} />
+                <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} ref={productNameInputRef} />
                 <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="pack" label="Packaging Cost" type="number" value={product.pack} onChange={e => onProductChange('pack', parseFloat(e.target.value) || 0)} icon="$" />
@@ -504,17 +512,17 @@ function StrategyButton({ label, newPrice, profit, onClick }) {
 }
 
 // --- Input component for all form fields ---
-function Input({ id, label, type = "text", value, onChange, icon, step }) {
+const Input = React.forwardRef(({ id, label, type = "text", value, onChange, icon, step }, ref) => {
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
       <div className="relative">
         {icon && <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">{icon}</span>}
-        <input type={type} id={id} value={value} onChange={onChange} step={step || (type === 'number' ? '0.01' : undefined)} className={`w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 transition ${icon ? 'pl-8' : 'pl-3'}`} />
+        <input ref={ref} type={type} id={id} value={value} onChange={onChange} step={step || (type === 'number' ? '0.01' : undefined)} className={`w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 transition ${icon ? 'pl-8' : 'pl-3'}`} />
       </div>
     </div>
   );
-}
+});
 
 // --- StatCard: shows profit, margin, breakeven stats ---
 function StatCard({ label, value, isPositive }) {
