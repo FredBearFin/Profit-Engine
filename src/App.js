@@ -292,6 +292,8 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
   );
 }
 
+// --- PASTE THIS ENTIRE UPDATED COMPONENT INTO src/App.js ---
+
 function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
     return (
         <div className="bg-white p-6 rounded-xl shadow-md">
@@ -306,10 +308,22 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
             <hr className="my-6 border-slate-200" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                 <div>
+                    {/* === MODIFIED SECTION START === */}
                     <div className="text-center">
-                        <label className="text-sm font-medium text-slate-600">Sale Price</label>
-                        <div className="text-4xl font-bold text-teal-700 mt-1">{fmtUSD(product.price)}</div>
+                        <label htmlFor="salePriceInput" className="text-sm font-medium text-slate-600">Sale Price</label>
+                        <div className="mt-1 relative">
+                            <span className="absolute left-0 inset-y-0 flex items-center pl-3 text-2xl text-slate-500">$</span>
+                            <input 
+                                type="number"
+                                id="salePriceInput"
+                                value={product.price}
+                                onChange={e => onPriceChange(parseFloat(e.target.value) || 0)}
+                                className="w-full text-center text-4xl font-bold text-teal-700 bg-transparent border-none focus:ring-0"
+                                step="0.05"
+                            />
+                        </div>
                     </div>
+                    {/* === MODIFIED SECTION END === */}
                     <div className="flex items-center gap-4 mt-4">
                         <button onClick={() => onPriceChange(product.price - 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">-</button>
                         <input type="range" min={product.minPrice} max={product.maxPrice} step="0.05" value={product.price} onChange={e => onPriceChange(parseFloat(e.target.value))} className="w-full" />
