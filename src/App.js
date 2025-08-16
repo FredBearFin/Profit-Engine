@@ -295,6 +295,38 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
 // --- PASTE THIS ENTIRE UPDATED COMPONENT INTO src/App.js ---
 
 function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
+    // Local state for sale price input
+    const [salePriceInput, setSalePriceInput] = useState(product.price);
+
+    // Sync local state when product changes
+    useEffect(() => {
+        setSalePriceInput(product.price);
+    }, [product.price]);
+
+    // Handle input change (free typing)
+    const handleSalePriceInputChange = (e) => {
+        setSalePriceInput(e.target.value);
+    };
+
+    // Validate and apply on blur or Enter
+    const handleSalePriceInputCommit = () => {
+        let val = parseFloat(salePriceInput);
+        if (isNaN(val)) val = product.minPrice;
+        // Clamp and round
+        const min = product.minPrice;
+        const max = product.maxPrice;
+        const clampedPrice = roundNickel(clamp(val, min, max));
+        setSalePriceInput(clampedPrice);
+        onPriceChange(clampedPrice);
+    };
+
+    // Handle Enter key
+    const handleSalePriceInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            handleSalePriceInputCommit();
+        }
+    };
+
     return (
         <div className="bg-white p-6 rounded-xl shadow-md">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -316,8 +348,10 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user }) {
                             <input 
                                 type="number"
                                 id="salePriceInput"
-                                value={product.price}
-                                onChange={e => onPriceChange(parseFloat(e.target.value) || 0)}
+                                value={salePriceInput}
+                                onChange={handleSalePriceInputChange}
+                                onBlur={handleSalePriceInputCommit}
+                                onKeyDown={handleSalePriceInputKeyDown}
                                 className="w-full text-center text-4xl font-bold text-teal-700 bg-transparent border-none focus:ring-0"
                                 step="0.05"
                             />
