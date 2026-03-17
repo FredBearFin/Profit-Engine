@@ -35,7 +35,21 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- SVG Icon Components ---
+// --- Platform fee presets ---
+// feePct = percentage fee, feeFlat = flat fee per transaction
+const PLATFORMS = [
+  { key: 'custom',   name: 'Custom',         feePct: 0,     feeFlat: 0,    note: null },
+  { key: 'ebay',     name: 'eBay',           feePct: 13.25, feeFlat: 0,    note: '13.25%' },
+  { key: 'mercari',  name: 'Mercari',        feePct: 10,    feeFlat: 0,    note: '10%' },
+  { key: 'poshmark', name: 'Poshmark',       feePct: 20,    feeFlat: 0,    note: '20% on sales $15+' },
+  { key: 'facebook', name: 'FB Marketplace', feePct: 5,     feeFlat: 0,    note: '5%' },
+  { key: 'etsy',     name: 'Etsy',           feePct: 6.5,   feeFlat: 0.20, note: '6.5% + $0.20 listing' },
+  { key: 'amazon',   name: 'Amazon FBA',     feePct: 15,    feeFlat: 4.00, note: '~15% + $4 fulfillment' },
+  { key: 'whatnot',  name: 'Whatnot',        feePct: 8,     feeFlat: 0,    note: '8%' },
+  { key: 'depop',    name: 'Depop',          feePct: 10,    feeFlat: 0,    note: '10%' },
+];
+
+// --- SVG Icons ---
 const PlusCircle = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
 );
@@ -43,33 +57,33 @@ const LogIn = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" /></svg>
 );
 const LogOut = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
 );
 const Trash2 = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
 );
 const X = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
 );
 const Save = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
 );
 
-// --- Spinner: animated loading indicator ---
 const Spinner = ({ className = '' }) => (
-    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
+  <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+  </svg>
 );
 
-// --- Utility functions ---
+// --- Utilities ---
 const fmtUSD = (n) => (isFinite(n) ? n : 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const roundNickel = (n) => Number((Math.round(n / 0.05) * 0.05).toFixed(2));
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 const createBlankProduct = () => ({
     name: 'Untitled Product',
+    platform: 'custom',
     landed: 5.00,
     ship: 3.50,
     pack: 0.50,
@@ -82,7 +96,7 @@ const createBlankProduct = () => ({
     createdAt: serverTimestamp()
 });
 
-// --- Main App Component ---
+// --- Main App ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
@@ -93,6 +107,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [toast, setToast] = useState(null);
+  const [mode, setMode] = useState('calculator'); // 'calculator' | 'quickflip'
   const productNameInputRef = useRef(null);
 
   const selectedProductData = products.find(p => p.id === selectedProductId);
@@ -102,7 +117,6 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // --- Auth state listener + load products ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setIsLoading(true);
@@ -114,7 +128,6 @@ export default function App() {
           const q = query(productsCollection, orderBy("createdAt", "desc"));
           const productSnapshot = await getDocs(q);
           const userProducts = productSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
           if (userProducts.length > 0) {
             setProducts(userProducts);
             setSelectedProductId(userProducts[0].id);
@@ -138,7 +151,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- Save product to Firestore ---
   const handleSaveProduct = async () => {
     if (!user) { setAuthModalOpen(true); return; }
     if (!selectedProductData || selectedProductData.id === 'anonymous') return;
@@ -155,7 +167,6 @@ export default function App() {
     }
   };
 
-  // --- Add a new product ---
   const handleAddNewProduct = async () => {
     if (!user || isAdding) return;
     setIsAdding(true);
@@ -177,7 +188,6 @@ export default function App() {
     }
   };
 
-  // --- Delete a product ---
   const handleDeleteProduct = async (productId) => {
     if (!user || products.length <= 1) return;
     try {
@@ -191,36 +201,51 @@ export default function App() {
     }
   };
 
-  // --- Handle product field changes ---
   const handleProductChange = (field, value) => {
     if (!selectedProductData) return;
     const updatedFields = { [field]: value };
     const costFields = ['landed', 'ship', 'pack', 'feePct', 'feeFlat'];
-
     if (costFields.includes(field)) {
-        const currentProduct = { ...selectedProductData, ...updatedFields };
-        const { landed, ship, pack, feePct, feeFlat } = currentProduct;
-        const totalCost = landed + ship + pack;
-        const f = feePct / 100;
-        const denom = 1 - f - 0.33;
-        if (denom > 0) {
-            const suggestedPrice = roundNickel((totalCost + feeFlat) / denom);
-            updatedFields.price = suggestedPrice;
-            updatedFields.minPrice = Math.round(suggestedPrice * 0.5);
-            updatedFields.maxPrice = Math.round(suggestedPrice * 2);
-        }
+      const current = { ...selectedProductData, ...updatedFields };
+      const totalCost = current.landed + current.ship + current.pack;
+      const f = current.feePct / 100;
+      const denom = 1 - f - 0.33;
+      if (denom > 0) {
+        const suggested = roundNickel((totalCost + current.feeFlat) / denom);
+        updatedFields.price = suggested;
+        updatedFields.minPrice = Math.round(suggested * 0.5);
+        updatedFields.maxPrice = Math.round(suggested * 2);
+      }
     }
-    const updatedProduct = { ...selectedProductData, ...updatedFields };
-    setProducts(products.map(p => p.id === selectedProductId ? updatedProduct : p));
+    const updated = { ...selectedProductData, ...updatedFields };
+    setProducts(products.map(p => p.id === selectedProductId ? updated : p));
+  };
+
+  // Batch-update fees + recalculate price when a platform preset is selected
+  const handlePlatformSelect = (platformKey) => {
+    const platform = PLATFORMS.find(p => p.key === platformKey);
+    if (!platform || !selectedProductData) return;
+    const { landed, ship, pack } = selectedProductData;
+    const totalCost = landed + ship + pack;
+    const f = platform.feePct / 100;
+    const denom = 1 - f - 0.33;
+    const updatedFields = { platform: platformKey, feePct: platform.feePct, feeFlat: platform.feeFlat };
+    if (denom > 0) {
+      const suggested = roundNickel((totalCost + platform.feeFlat) / denom);
+      updatedFields.price = suggested;
+      updatedFields.minPrice = Math.round(suggested * 0.5);
+      updatedFields.maxPrice = Math.round(suggested * 2);
+    }
+    const updated = { ...selectedProductData, ...updatedFields };
+    setProducts(products.map(p => p.id === selectedProductId ? updated : p));
   };
 
   const handlePriceChange = (newPrice) => {
-      if (!selectedProductData) return;
-      const clampedPrice = roundNickel(clamp(newPrice, selectedProductData.minPrice, selectedProductData.maxPrice));
-      handleProductChange('price', clampedPrice);
+    if (!selectedProductData) return;
+    const clamped = roundNickel(clamp(newPrice, selectedProductData.minPrice, selectedProductData.maxPrice));
+    handleProductChange('price', clamped);
   };
 
-  // --- Loading screen ---
   if (isLoading) {
     return (
       <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
@@ -230,14 +255,11 @@ export default function App() {
     );
   }
 
-  // --- Error screen ---
   if (loadError) {
     return (
       <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 p-6 text-center">
         <p className="text-red-500 font-semibold">{loadError}</p>
-        <button onClick={() => window.location.reload()} className="text-sm text-emerald-600 font-semibold underline">
-          Retry
-        </button>
+        <button onClick={() => window.location.reload()} className="text-sm text-emerald-600 font-semibold underline">Retry</button>
       </div>
     );
   }
@@ -247,49 +269,69 @@ export default function App() {
       <Header user={user} onLoginClick={() => setAuthModalOpen(true)} />
 
       <main className="p-4 md:p-6 lg:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {user && (
-            <ProductSidebar
-              products={products}
-              selectedProductId={selectedProductId}
-              onSelectProduct={setSelectedProductId}
-              onAddProduct={handleAddNewProduct}
-              onDeleteProduct={handleDeleteProduct}
-              isAdding={isAdding}
-            />
-          )}
-          <div className={user ? "lg:col-span-3" : "lg:col-span-4"}>
-            {selectedProductData ? (
-              <div className="space-y-6">
-                <Calculator
-                  product={selectedProductData}
-                  onProductChange={handleProductChange}
-                  onPriceChange={handlePriceChange}
-                  onSave={handleSaveProduct}
-                  isSaving={isSaving}
-                  user={user}
-                  productNameInputRef={productNameInputRef}
-                />
-                <StrategyPanel
-                  product={selectedProductData}
-                  onPriceChange={handlePriceChange}
-                  onProductChange={handleProductChange}
-                />
-              </div>
-            ) : (
-              <div className="bg-white p-6 rounded-xl shadow-md text-center">
-                <p>Select a product or add a new one.</p>
-              </div>
-            )}
-          </div>
+        {/* Mode toggle — always visible at top */}
+        <div className="flex gap-1.5 mb-6 bg-white p-1.5 rounded-xl shadow-sm max-w-sm">
+          <button
+            onClick={() => setMode('calculator')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'calculator' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            Full Calculator
+          </button>
+          <button
+            onClick={() => setMode('quickflip')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'quickflip' ? 'bg-emerald-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            ⚡ Quick Flip
+          </button>
         </div>
+
+        {mode === 'quickflip' ? (
+          <QuickFlip />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {user && (
+              <ProductSidebar
+                products={products}
+                selectedProductId={selectedProductId}
+                onSelectProduct={setSelectedProductId}
+                onAddProduct={handleAddNewProduct}
+                onDeleteProduct={handleDeleteProduct}
+                isAdding={isAdding}
+              />
+            )}
+            <div className={user ? "lg:col-span-3" : "lg:col-span-4"}>
+              {selectedProductData ? (
+                <div className="space-y-6">
+                  <Calculator
+                    product={selectedProductData}
+                    onProductChange={handleProductChange}
+                    onPlatformSelect={handlePlatformSelect}
+                    onPriceChange={handlePriceChange}
+                    onSave={handleSaveProduct}
+                    isSaving={isSaving}
+                    user={user}
+                    productNameInputRef={productNameInputRef}
+                  />
+                  <StrategyPanel
+                    product={selectedProductData}
+                    onPriceChange={handlePriceChange}
+                    onProductChange={handleProductChange}
+                  />
+                </div>
+              ) : (
+                <div className="bg-white p-6 rounded-xl shadow-md text-center">
+                  <p>Select a product or add a new one.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {isAuthModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
 
-      {/* Toast notification */}
       {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-lg z-50 text-sm font-semibold text-white transition-all ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-lg z-50 text-sm font-semibold text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
           {toast.message}
         </div>
       )}
@@ -369,41 +411,61 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
 }
 
 // --- Calculator ---
-function Calculator({ product, onProductChange, onPriceChange, onSave, isSaving, user, productNameInputRef }) {
+function Calculator({ product, onProductChange, onPlatformSelect, onPriceChange, onSave, isSaving, user, productNameInputRef }) {
     const [salePriceInput, setSalePriceInput] = useState(product.price);
 
-    useEffect(() => {
-        setSalePriceInput(product.price);
-    }, [product.price]);
-
-    const handleSalePriceInputChange = (e) => setSalePriceInput(e.target.value);
+    useEffect(() => { setSalePriceInput(product.price); }, [product.price]);
 
     const handleSalePriceInputCommit = () => {
         let val = parseFloat(salePriceInput);
         if (isNaN(val)) val = product.minPrice;
-        const clampedPrice = roundNickel(clamp(val, product.minPrice, product.maxPrice));
-        setSalePriceInput(clampedPrice);
-        onPriceChange(clampedPrice);
-    };
-
-    const handleSalePriceInputKeyDown = (e) => {
-        if (e.key === 'Enter') handleSalePriceInputCommit();
+        const clamped = roundNickel(clamp(val, product.minPrice, product.maxPrice));
+        setSalePriceInput(clamped);
+        onPriceChange(clamped);
     };
 
     return (
         <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
+            {/* Platform preset selector */}
+            <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-600 mb-2">Platform</label>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {PLATFORMS.filter(p => p.key !== 'custom').map(p => (
+                        <button
+                            key={p.key}
+                            onClick={() => onPlatformSelect(p.key)}
+                            className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all leading-tight ${(product.platform || 'custom') === p.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}
+                        >
+                            {p.name}
+                        </button>
+                    ))}
+                    <button
+                        onClick={() => onPlatformSelect('custom')}
+                        className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all ${(product.platform || 'custom') === 'custom' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}
+                    >
+                        Custom
+                    </button>
+                </div>
+                {/* Show the note for the selected platform */}
+                {(() => {
+                    const sel = PLATFORMS.find(p => p.key === (product.platform || 'custom'));
+                    return sel?.note ? <p className="text-xs text-slate-400 mt-1.5">{sel.note}</p> : null;
+                })()}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} ref={productNameInputRef} />
                 <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="pack" label="Packaging Cost" type="number" value={product.pack} onChange={e => onProductChange('pack', parseFloat(e.target.value) || 0)} icon="$" />
-                <Input id="feePct" label="Marketplace Fee" type="number" value={product.feePct} onChange={e => onProductChange('feePct', parseFloat(e.target.value) || 0)} icon="%" />
+                <Input id="feePct" label="Marketplace Fee %" type="number" value={product.feePct} onChange={e => onProductChange('feePct', parseFloat(e.target.value) || 0)} icon="%" />
                 <Input id="feeFlat" label="Flat Fee" type="number" value={product.feeFlat} onChange={e => onProductChange('feeFlat', parseFloat(e.target.value) || 0)} icon="$" />
             </div>
+
             <hr className="my-6 border-slate-200" />
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                 <div>
-                    {/* Sale Price — flex layout so $ never overlaps the number */}
                     <div className="text-center">
                         <label htmlFor="salePriceInput" className="text-sm font-medium text-slate-600">Sale Price</label>
                         <div className="mt-1 flex items-center justify-center gap-1">
@@ -412,33 +474,18 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, isSaving,
                                 type="number"
                                 id="salePriceInput"
                                 value={salePriceInput}
-                                onChange={handleSalePriceInputChange}
+                                onChange={e => setSalePriceInput(e.target.value)}
                                 onBlur={handleSalePriceInputCommit}
-                                onKeyDown={handleSalePriceInputKeyDown}
+                                onKeyDown={e => e.key === 'Enter' && handleSalePriceInputCommit()}
                                 className="w-36 text-center text-4xl font-bold text-emerald-700 bg-transparent border-none focus:ring-0 min-w-0"
                                 step="0.05"
                             />
                         </div>
                     </div>
-                    {/* Slider + +/- buttons — larger tap targets for mobile */}
                     <div className="flex items-center gap-3 mt-4">
-                        <button
-                            onClick={() => onPriceChange(product.price - 0.05)}
-                            className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition text-lg font-bold flex-shrink-0"
-                        >−</button>
-                        <input
-                            type="range"
-                            min={product.minPrice}
-                            max={product.maxPrice}
-                            step="0.05"
-                            value={product.price}
-                            onChange={e => onPriceChange(parseFloat(e.target.value))}
-                            className="w-full"
-                        />
-                        <button
-                            onClick={() => onPriceChange(product.price + 0.05)}
-                            className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition text-lg font-bold flex-shrink-0"
-                        >+</button>
+                        <button onClick={() => onPriceChange(product.price - 0.05)} className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition text-lg font-bold flex-shrink-0">−</button>
+                        <input type="range" min={product.minPrice} max={product.maxPrice} step="0.05" value={product.price} onChange={e => onPriceChange(parseFloat(e.target.value))} className="w-full" />
+                        <button onClick={() => onPriceChange(product.price + 0.05)} className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition text-lg font-bold flex-shrink-0">+</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -446,7 +493,7 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, isSaving,
                     <Input id="maxPrice" label="Max Price" type="number" value={product.maxPrice} onChange={e => onProductChange('maxPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
                 </div>
             </div>
-            {/* Save button — full width on mobile, inline on larger screens */}
+
             <div className="mt-6">
                 <button
                     onClick={onSave}
@@ -456,6 +503,125 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, isSaving,
                     {isSaving ? <Spinner className="w-5 h-5" /> : <Save className="w-5 h-5" />}
                     {isSaving ? 'Saving...' : (user ? 'Save Changes' : 'Save & Sign Up')}
                 </button>
+            </div>
+        </div>
+    );
+}
+
+// --- Quick Flip Mode ---
+// Stripped-down calculator for fast in-store decisions. No Firebase, fully local.
+function QuickFlip() {
+    const [cost, setCost] = useState('');
+    const [price, setPrice] = useState('');
+    const [platformKey, setPlatformKey] = useState('ebay');
+
+    const platform = PLATFORMS.find(p => p.key === platformKey);
+    const costNum = parseFloat(cost) || 0;
+    const priceNum = parseFloat(price) || 0;
+    const hasValues = costNum > 0 && priceNum > 0;
+
+    const fees = priceNum * (platform.feePct / 100) + platform.feeFlat;
+    const profit = priceNum - costNum - fees;
+    const margin = priceNum > 0 ? (profit / priceNum) * 100 : 0;
+
+    let verdict = null;
+    if (hasValues) {
+        if (margin >= 20)      verdict = { icon: '✅', tone: 'emerald', label: 'Flip it.',           sub: 'Solid margin — go for it.' };
+        else if (margin >= 10) verdict = { icon: '⚠️', tone: 'amber',   label: 'Slim margin.',       sub: 'Know your costs before committing.' };
+        else                   verdict = { icon: '❌', tone: 'red',     label: profit < 0 ? "You'd lose money." : 'Not worth it.', sub: 'Pass on this one.' };
+    }
+
+    const toneClasses = {
+        emerald: { card: 'bg-emerald-50 border-emerald-300', label: 'text-emerald-700', profit: 'text-emerald-600' },
+        amber:   { card: 'bg-amber-50 border-amber-300',     label: 'text-amber-700',   profit: 'text-amber-600' },
+        red:     { card: 'bg-red-50 border-red-300',         label: 'text-red-700',     profit: 'text-red-500' },
+    };
+    const tc = verdict ? toneClasses[verdict.tone] : null;
+
+    return (
+        <div className="max-w-sm mx-auto space-y-4 pt-1 pb-8">
+            {/* Platform selector */}
+            <div className="bg-white rounded-xl shadow-md p-4 sm:p-5">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Platform</p>
+                <div className="grid grid-cols-3 gap-2">
+                    {PLATFORMS.filter(p => p.key !== 'custom').map(p => (
+                        <button
+                            key={p.key}
+                            onClick={() => setPlatformKey(p.key)}
+                            className={`py-2.5 px-1 rounded-lg text-xs font-semibold border transition-all leading-tight ${platformKey === p.key ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                        >
+                            {p.name}
+                        </button>
+                    ))}
+                </div>
+                {platform?.note && (
+                    <p className="text-xs text-slate-400 mt-2.5 text-center">{platform.note}</p>
+                )}
+            </div>
+
+            {/* Cost + Price inputs */}
+            <div className="bg-white rounded-xl shadow-md p-4 sm:p-5 space-y-5">
+                <BigInput label="What did you pay?" value={cost} onChange={setCost} />
+                <BigInput label="What's it selling for?" value={price} onChange={setPrice} />
+            </div>
+
+            {/* Verdict */}
+            {hasValues ? (
+                <div className={`rounded-xl border-2 p-5 ${tc.card}`}>
+                    <div className="flex items-start gap-3 mb-4">
+                        <span className="text-4xl leading-none mt-0.5">{verdict.icon}</span>
+                        <div>
+                            <p className={`text-2xl font-bold leading-tight ${tc.label}`}>{verdict.label}</p>
+                            <p className={`text-sm mt-0.5 ${tc.label} opacity-75`}>{verdict.sub}</p>
+                        </div>
+                    </div>
+                    <div className="space-y-2 text-sm border-t border-slate-200 pt-3">
+                        <div className="flex justify-between text-slate-600">
+                            <span>Sale price</span>
+                            <span className="font-semibold text-slate-800">{fmtUSD(priceNum)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                            <span>{platform.name} fee ({platform.feePct}%{platform.feeFlat > 0 ? ` + ${fmtUSD(platform.feeFlat)}` : ''})</span>
+                            <span className="font-semibold text-red-500">−{fmtUSD(fees)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                            <span>Your cost</span>
+                            <span className="font-semibold text-red-500">−{fmtUSD(costNum)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-slate-200 pt-2 mt-1">
+                            <span className="font-bold text-slate-800">Net profit</span>
+                            <span className={`font-bold text-xl ${tc.profit}`}>{fmtUSD(profit)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-500">
+                            <span>Margin</span>
+                            <span className={`font-semibold ${tc.profit}`}>{margin.toFixed(1)}%</span>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <p className="text-center text-slate-400 text-sm py-6">
+                    Enter your cost and the sale price above.
+                </p>
+            )}
+        </div>
+    );
+}
+
+// --- Big number input for Quick Flip ---
+function BigInput({ label, value, onChange }) {
+    return (
+        <div>
+            <p className="text-sm font-semibold text-slate-600 mb-2">{label}</p>
+            <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-slate-300">$</span>
+                <input
+                    type="number"
+                    inputMode="decimal"
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                    placeholder="0.00"
+                    className="flex-1 text-4xl font-bold text-slate-800 bg-transparent border-b-2 border-slate-200 focus:border-emerald-500 focus:outline-none pb-1 min-w-0 placeholder-slate-200"
+                />
             </div>
         </div>
     );
@@ -475,11 +641,6 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
       return roundNickel((totalCost + feeFlat) / denom);
     };
 
-    const handleMarginButtonClick = (margin) => {
-        const targetPrice = priceForMargin(margin);
-        if (!isNaN(targetPrice)) onPriceChange(targetPrice);
-    };
-
     const margins = [0.10, 0.15, 0.20, 0.25, 0.33, 0.40, 0.50, 0.75];
 
     return (
@@ -493,7 +654,7 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
                             {margins.map(margin => (
                                 <button
                                     key={margin}
-                                    onClick={() => handleMarginButtonClick(margin)}
+                                    onClick={() => { const p = priceForMargin(margin); if (!isNaN(p)) onPriceChange(p); }}
                                     className="text-sm font-semibold py-3 bg-slate-100 rounded-lg hover:bg-emerald-100 hover:text-emerald-800 transition-colors"
                                 >
                                     {Math.round(margin * 100)}%
@@ -511,17 +672,17 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
                                     You are currently <span className={`font-bold ${price < competitorPrice ? 'text-green-600' : 'text-red-600'}`}>{fmtUSD(Math.abs(price - competitorPrice))} {price < competitorPrice ? 'below' : 'above'}</span> them.
                                 </div>
                                 <div className="space-y-2">
-                                    <StrategyButton label="Price to Beat" newPrice={competitorPrice - 0.50} profit={calculateProfit(competitorPrice - 0.50)} onClick={onPriceChange} />
-                                    <StrategyButton label="Price to Match" newPrice={competitorPrice} profit={calculateProfit(competitorPrice)} onClick={onPriceChange} />
-                                    <StrategyButton label="Price for Premium" newPrice={competitorPrice * 1.05} profit={calculateProfit(competitorPrice * 1.05)} onClick={onPriceChange} />
+                                    <StrategyButton label="Price to Beat"    newPrice={competitorPrice - 0.50}   profit={calculateProfit(competitorPrice - 0.50)}   onClick={onPriceChange} />
+                                    <StrategyButton label="Price to Match"   newPrice={competitorPrice}           profit={calculateProfit(competitorPrice)}           onClick={onPriceChange} />
+                                    <StrategyButton label="Price for Premium" newPrice={competitorPrice * 1.05}  profit={calculateProfit(competitorPrice * 1.05)}    onClick={onPriceChange} />
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
-            <StatCard label="Net Profit" value={fmtUSD(profit)} isPositive={profit >= 0} />
-            <StatCard label="Net Margin" value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`} isPositive={profit >= 0} />
+            <StatCard label="Net Profit"      value={fmtUSD(profit)} isPositive={profit >= 0} />
+            <StatCard label="Net Margin"      value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`} isPositive={profit >= 0} />
             <StatCard label="Breakeven Price" value={fmtUSD((1 - feePct / 100) > 0 ? (totalCost + feeFlat) / (1 - feePct / 100) : Infinity)} />
         </div>
     );
@@ -541,25 +702,19 @@ function StrategyButton({ label, newPrice, profit, onClick }) {
 }
 
 // --- Input ---
-const Input = React.forwardRef(({ id, label, type = "text", value, onChange, icon, step }, ref) => {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
-      <div className="relative">
-        {icon && <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">{icon}</span>}
-        <input
-          ref={ref}
-          type={type}
-          id={id}
-          value={value}
-          onChange={onChange}
-          step={step || (type === 'number' ? '0.01' : undefined)}
-          className={`w-full py-3 px-3 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 transition ${icon ? 'pl-8' : 'pl-3'}`}
-        />
-      </div>
+const Input = React.forwardRef(({ id, label, type = "text", value, onChange, icon, step }, ref) => (
+  <div>
+    <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
+    <div className="relative">
+      {icon && <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">{icon}</span>}
+      <input
+        ref={ref} type={type} id={id} value={value} onChange={onChange}
+        step={step || (type === 'number' ? '0.01' : undefined)}
+        className={`w-full py-3 px-3 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 transition ${icon ? 'pl-8' : 'pl-3'}`}
+      />
     </div>
-  );
-});
+  </div>
+));
 
 // --- Stat Card ---
 function StatCard({ label, value, isPositive }) {
@@ -580,7 +735,6 @@ function AuthModal({ onClose }) {
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Map Firebase error codes to friendly messages
     const friendlyError = (err) => {
         const code = err.code || '';
         if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Incorrect email or password.';
@@ -612,20 +766,14 @@ function AuthModal({ onClose }) {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
             <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-md relative">
-                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
-                    <X className="w-6 h-6" />
-                </button>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"><X className="w-6 h-6" /></button>
                 <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">{isLogin ? 'Log In' : 'Create Account'}</h2>
                 <p className="text-center text-slate-500 mb-6 text-sm">Save your products and calculations.</p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input id="email" label="Email Address" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                     <Input id="password" label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
                     {error && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</p>}
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="w-full flex items-center justify-center gap-2 font-semibold bg-emerald-600 text-white py-3 rounded-lg hover:bg-emerald-700 transition-colors shadow disabled:opacity-60"
-                    >
+                    <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center gap-2 font-semibold bg-emerald-600 text-white py-3 rounded-lg hover:bg-emerald-700 transition-colors shadow disabled:opacity-60">
                         {isSubmitting && <Spinner className="w-5 h-5" />}
                         {isSubmitting ? 'Please wait...' : (isLogin ? 'Log In' : 'Sign Up')}
                     </button>
