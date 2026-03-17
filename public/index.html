@@ -5,28 +5,103 @@
     <link rel="icon" href="%PUBLIC_URL%/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#059669" />
-    <meta name="description" content="Profit Engine — the profit calculator built for resellers." />
+
+    <!-- Primary SEO -->
+    <title>Profit Engine — Free Reseller Profit Calculator for eBay, Mercari, Poshmark & More</title>
+    <meta name="description" content="Free profit calculator for resellers and flippers. Calculate exact margins for eBay, Mercari, Poshmark, Facebook Marketplace, Etsy, and Amazon FBA. Account for fees, shipping, returns, and your time — before you list." />
+    <meta name="keywords" content="reseller profit calculator, eBay profit calculator, Mercari profit calculator, Poshmark profit calculator, Amazon FBA profit calculator, Etsy profit calculator, Facebook Marketplace profit calculator, flip profit calculator, reselling calculator, dropship profit calculator, margin calculator reseller" />
+    <meta name="robots" content="index, follow" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Profit Engine" />
-    <meta property="og:description" content="The profit calculator built for resellers. Know your margins before you list." />
+    <meta property="og:title" content="Profit Engine — Free Reseller Profit Calculator" />
+    <meta property="og:description" content="Know your margins before you list. Calculate profit for eBay, Mercari, Poshmark, Etsy, Amazon FBA, and more." />
     <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Profit Engine" />
-    <meta name="twitter:description" content="The profit calculator built for resellers. Know your margins before you list." />
+    <meta name="twitter:title" content="Profit Engine — Free Reseller Profit Calculator" />
+    <meta name="twitter:description" content="Know your margins before you list. Calculate profit for eBay, Mercari, Poshmark, Etsy, Amazon FBA, and more." />
     <meta name="twitter:image" content="%PUBLIC_URL%/og-image.png" />
 
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.svg" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>Profit Engine — the profit calculator built for resellers.</title>
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Profit Engine",
+      "description": "Free profit calculator for resellers. Calculate exact margins for eBay, Mercari, Poshmark, Facebook Marketplace, Etsy, and Amazon FBA. Accounts for platform fees, shipping, returns, and time cost.",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "eBay profit calculator",
+        "Mercari profit calculator",
+        "Poshmark profit calculator",
+        "Facebook Marketplace profit calculator",
+        "Etsy profit calculator",
+        "Amazon FBA profit calculator",
+        "Platform fee comparison",
+        "Return rate cost modeling",
+        "Time cost calculator",
+        "Deal history tracking"
+      ]
+    }
+    </script>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <noscript>
+      <div style="font-family:system-ui,sans-serif;background:#f8fafc;min-height:100vh;">
+        <header style="background:#0f172a;padding:1rem 1.5rem;display:flex;align-items:center;gap:0.75rem;">
+          <div style="background:#059669;border-radius:8px;width:36px;height:36px;flex-shrink:0;"></div>
+          <div>
+            <strong style="color:white;font-size:1.25rem;">Profit Engine</strong>
+            <p style="color:#34d399;font-size:0.75rem;margin:0.25rem 0 0;">the profit calculator built for resellers.</p>
+          </div>
+        </header>
+        <main style="padding:2rem 1.5rem;max-width:640px;margin:0 auto;text-align:center;">
+          <p style="font-size:3rem;margin:0 0 1rem;">⚙️</p>
+          <h2 style="color:#1e293b;font-size:1.5rem;margin:0 0 0.75rem;">JavaScript is required</h2>
+          <p style="color:#475569;line-height:1.6;margin:0 0 1.5rem;">Profit Engine is an interactive calculator — it needs JavaScript to run. Please enable JavaScript in your browser settings and reload the page.</p>
+          <a href="https://www.enable-javascript.com/" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#059669;color:white;font-weight:600;padding:0.75rem 1.5rem;border-radius:0.5rem;text-decoration:none;">How to enable JavaScript →</a>
+        </main>
+      </div>
+    </noscript>
+
+    <!-- Static pre-render for SEO — React replaces this content on load -->
+    <div id="root">
+      <div style="font-family:system-ui,sans-serif;background:#f8fafc;min-height:100vh;">
+        <header style="background:#0f172a;padding:1rem 1.5rem;display:flex;align-items:center;gap:0.75rem;">
+          <div style="background:#059669;border-radius:8px;width:36px;height:36px;flex-shrink:0;"></div>
+          <div>
+            <h1 style="color:white;font-size:1.25rem;font-weight:700;margin:0;">Profit Engine</h1>
+            <p style="color:#34d399;font-size:0.75rem;margin:0.2rem 0 0;">the profit calculator built for resellers.</p>
+          </div>
+        </header>
+        <main style="padding:2rem 1.5rem;max-width:720px;margin:0 auto;">
+          <h2 style="color:#1e293b;font-size:1.75rem;font-weight:700;margin:0 0 0.75rem;">Free Reseller Profit Calculator</h2>
+          <p style="color:#475569;font-size:1rem;line-height:1.7;margin:0 0 1.5rem;">
+            Calculate your exact profit and margin for every major reselling platform — before you list.
+            Factor in item cost, shipping, platform fees, return rates, and your own time.
+          </p>
+          <ul style="color:#475569;line-height:2.2;padding:0;list-style:none;margin:0 0 2rem;">
+            <li>✓ eBay profit calculator — 13.25% fee</li>
+            <li>✓ Mercari profit calculator — 10% fee</li>
+            <li>✓ Poshmark profit calculator — 20% fee on sales $15+</li>
+            <li>✓ Facebook Marketplace profit calculator — 5% fee</li>
+            <li>✓ Etsy profit calculator — 6.5% + $0.20 listing fee</li>
+            <li>✓ Amazon FBA profit calculator — ~15% + $4 fulfillment</li>
+          </ul>
+          <p style="color:#94a3b8;font-size:0.875rem;">Loading calculator...</p>
+        </main>
+      </div>
+    </div>
   </body>
 </html>
-
-
