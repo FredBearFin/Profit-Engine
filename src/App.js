@@ -23,13 +23,13 @@ import {
 } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyB4z-JrEmvqtzshnsvEO_wTWWQ-eId5MOo",
+  authDomain: "dropship-profit-calculator.firebaseapp.com",
+  projectId: "dropship-profit-calculator",
+  storageBucket: "dropship-profit-calculator.firebasestorage.app",
+  messagingSenderId: "12386923384",
+  appId: "1:12386923384:web:38891fd0cd2cb12badce8d",
+  measurementId: "G-5X8WP42KQ8"
 };
 
 const app = initializeApp(firebaseConfig);
