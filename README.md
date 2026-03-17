@@ -1,60 +1,64 @@
-# Profit Engine - Launch Instructions
+# Profit Engine
 
-This project contains the complete source code for the Profit Engine web application. To deploy this to a live website, follow these steps.
+Free profit calculator for resellers and flippers. Enter your cost, platform, and sale price — instantly see your net profit, margin, ROI, and break-even price.
 
-### Prerequisites
+**Live app:** https://profitengine.netlify.app
 
-You must have Node.js and npm installed on your computer. You can get them from [https://nodejs.org/](https://nodejs.org/).
+---
 
-### Step 1: Set Up Your Local Project
+## Supported Platforms
 
-1.  **Create a Project Folder:** On your computer, create a new folder named `profit-engine`.
-2.  **Create Files:** Inside that folder, create the files as described below (`package.json`, `public/index.html`, `src/App.js`, `src/index.js`). Copy and paste the content for each file from this document.
-3.  **Install Dependencies:** Open your command line/terminal, navigate into the `profit-engine` folder, and run the command:
-    ```
-    npm install
-    ```
+| Platform | Fee Structure |
+|---|---|
+| eBay | 13.25% + $0.30/order |
+| Poshmark | 20% (or $2.95 flat under $15) |
+| Mercari | 10% + 2.9% + $0.50 payment processing |
+| Depop | 10% + 2.9% + $0.30 payment processing |
+| Facebook Marketplace | 5% (or $0.40 flat under $8) |
+| Etsy | 6.5% + 3% + $0.25 payment + $0.20 listing |
+| StockX | 9% seller fee (new sellers) |
+| Amazon FBA | ~15% + $4 fulfillment |
+| Whatnot | 8% seller fee |
+| Custom | Set your own fee |
 
-### Step 2: Connect to Your Firebase Project
+---
 
-1.  **Get Your Config:** Log in to your Firebase project, go to Project Settings, and copy your `firebaseConfig` object.
-2.  **Paste Your Config:** Open the `src/App.js` file and paste your `firebaseConfig` object into the placeholder section at the top.
+## What It Calculates
 
-### Step 3: Test Locally (Optional)
+- **Net Profit** — what you actually take home after all costs
+- **Profit Margin** — net profit as a % of sale price
+- **ROI** — return on investment as a % of your total cost
+- **Break-even Price** — the minimum sale price to not lose money
 
-1.  From your command line, run:
-    ```
-    npm start
-    ```
-    This will open the app in your web browser. You can test that login and saving works.
+Also accounts for: outbound shipping, packaging supplies, return rate risk, and your time cost per item.
 
-### Step 4: Deploy to the World
+---
 
-1.  **Install Firebase Tools:** If you haven't already, run this command once:
-    ```
-    npm install -g firebase-tools
-    ```
-2.  **Login to Firebase:**
-    ```
-    firebase login
-    ```
-3.  **Initialize Hosting:**
-    ```
-    firebase init hosting
-    ```
-    - Select "Use an existing project" and choose your Firebase project.
-    - When it asks for your public directory, type **`build`**.
-    - Configure as a single-page app by answering **Yes**.
-    - Do **not** overwrite the `build/index.html` file if it asks.
+## Features
 
-4.  **Build the App for Production:**
-    ```
-    npm run build
-    ```
-5.  **Deploy!**
-    ```
-    firebase deploy
-    ```
+- **Full Calculator** — detailed per-product breakdown with all cost inputs
+- **Quick Flip mode** — instant go/no-go for thrift store finds
+- **Platform Comparison** — see profit across all platforms at once
+- **Deal History** — log deals, tag them Sold/Listed/Passed, track win rate
+- **Strategy Panel** — set price by target margin, analyze competitor pricing
+- **Copy Result** — share a clean profit summary to clipboard
 
-Your site is now live on your Firebase Hosting URL. If you connected a custom domain, it will be live there as well.
+---
 
+## Built With
+
+- [React](https://react.dev)
+- [Tailwind CSS](https://tailwindcss.com)
+- [Firebase](https://firebase.google.com) (Auth + Firestore)
+
+---
+
+## Local Development
+
+```bash
+git clone https://github.com/FredBearFin/Profit-Engine.git
+cd Profit-Engine
+npm install
+cp .env.example .env   # fill in your Firebase credentials
+npm start
+```

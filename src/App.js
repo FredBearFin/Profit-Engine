@@ -23,13 +23,13 @@ import {
 } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyB4z-JrEmvqtzshnsvEO_wTWWQ-eId5MOo",
-  authDomain: "dropship-profit-calculator.firebaseapp.com",
-  projectId: "dropship-profit-calculator",
-  storageBucket: "dropship-profit-calculator.firebasestorage.app",
-  messagingSenderId: "12386923384",
-  appId: "1:12386923384:web:38891fd0cd2cb12badce8d",
-  measurementId: "G-5X8WP42KQ8"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
@@ -39,14 +39,15 @@ const db = getFirestore(app);
 // --- Platform fee presets ---
 const PLATFORMS = [
   { key: 'custom',   name: 'Custom',         feePct: 0,     feeFlat: 0,    note: null },
-  { key: 'ebay',     name: 'eBay',           feePct: 13.25, feeFlat: 0,    note: '13.25%' },
-  { key: 'mercari',  name: 'Mercari',        feePct: 10,    feeFlat: 0,    note: '10%' },
-  { key: 'poshmark', name: 'Poshmark',       feePct: 20,    feeFlat: 0,    note: '20% on sales $15+' },
-  { key: 'facebook', name: 'FB Marketplace', feePct: 5,     feeFlat: 0,    note: '5%' },
-  { key: 'etsy',     name: 'Etsy',           feePct: 6.5,   feeFlat: 0.20, note: '6.5% + $0.20 listing' },
+  { key: 'ebay',     name: 'eBay',           feePct: 13.25, feeFlat: 0.30, note: '13.25% + $0.30/order' },
+  { key: 'mercari',  name: 'Mercari',        feePct: 12.9,  feeFlat: 0.50, note: '10% + 2.9% + $0.50 payment' },
+  { key: 'poshmark', name: 'Poshmark',       feePct: 20,    feeFlat: 0,    note: '20% (sales $15+), $2.95 flat under $15' },
+  { key: 'facebook', name: 'FB Marketplace', feePct: 5,     feeFlat: 0,    note: '5% (or $0.40 flat under $8)' },
+  { key: 'etsy',     name: 'Etsy',           feePct: 9.5,   feeFlat: 0.45, note: '6.5% + 3% + $0.25 payment + $0.20 listing' },
+  { key: 'depop',    name: 'Depop',          feePct: 12.9,  feeFlat: 0.30, note: '10% Depop + 2.9% + $0.30 payment' },
+  { key: 'stockx',   name: 'StockX',         feePct: 9,     feeFlat: 0,    note: '9% seller fee (new sellers)' },
   { key: 'amazon',   name: 'Amazon FBA',     feePct: 15,    feeFlat: 4.00, note: '~15% + $4 fulfillment' },
-  { key: 'whatnot',  name: 'Whatnot',        feePct: 8,     feeFlat: 0,    note: '8%' },
-  { key: 'depop',    name: 'Depop',          feePct: 10,    feeFlat: 0,    note: '10%' },
+  { key: 'whatnot',  name: 'Whatnot',        feePct: 8,     feeFlat: 0,    note: '8% seller fee' },
 ];
 
 // --- SVG Icons ---
@@ -326,6 +327,15 @@ export default function App() {
     handleProductChange('price', clamped);
   };
 
+  const handleCopyResult = (product, profit) => {
+    const platform = PLATFORMS.find(p => p.key === (product.platform || 'custom'));
+    const platformName = platform?.name || 'Custom';
+    const totalCost = (product.landed || 0) + (product.ship || 0) + (product.pack || 0);
+    const roi = totalCost > 0 ? ((profit / totalCost) * 100).toFixed(0) : '0';
+    const text = `${platformName} flip: Sold ${fmtUSD(product.price)} | Cost ${fmtUSD(totalCost)} | Net profit ${fmtUSD(profit)} (${roi}% ROI) — calculated with Profit Engine`;
+    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'));
+  };
+
   if (isLoading) {
     return (
       <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
@@ -352,19 +362,19 @@ export default function App() {
         <div className="flex gap-1.5 mb-6 bg-white p-1.5 rounded-xl shadow-sm max-w-lg">
           <button
             onClick={() => setMode('calculator')}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'calculator' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-semibold transition-all ${mode === 'calculator' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
           >
             Full Calculator
           </button>
           <button
             onClick={() => setMode('quickflip')}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'quickflip' ? 'bg-emerald-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-semibold transition-all ${mode === 'quickflip' ? 'bg-emerald-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
           >
             ⚡ Quick Flip
           </button>
           <button
             onClick={() => setMode('history')}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'history' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-semibold transition-all ${mode === 'history' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
           >
             📋 History
             {dealHistory.length > 0 && (
@@ -424,6 +434,7 @@ export default function App() {
                     onLogDeal={() => handleLogDeal(selectedProductData)}
                     onLoginClick={() => setAuthModalOpen(true)}
                     user={user}
+                    onCopyResult={() => handleCopyResult(selectedProductData, computeProfit(selectedProductData, selectedProductData.price, selectedProductData.feePct, selectedProductData.feeFlat))}
                   />
                 </div>
               ) : (
@@ -545,14 +556,14 @@ function Calculator({ product, onProductChange, onPlatformSelect, onPriceChange,
                         <button
                             key={p.key}
                             onClick={() => onPlatformSelect(p.key)}
-                            className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all leading-tight ${(product.platform || 'custom') === p.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}
+                            className={`py-2.5 min-h-[44px] px-1 rounded-lg text-xs font-semibold border transition-all leading-tight ${(product.platform || 'custom') === p.key ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}
                         >
                             {p.name}
                         </button>
                     ))}
                     <button
                         onClick={() => onPlatformSelect('custom')}
-                        className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all ${(product.platform || 'custom') === 'custom' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}
+                        className={`py-2.5 min-h-[44px] px-1 rounded-lg text-xs font-semibold border transition-all ${(product.platform || 'custom') === 'custom' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}
                     >
                         Custom
                     </button>
@@ -846,7 +857,7 @@ function QuickFlip({ user, onLogDeal, onLoginClick, cost, setCost, price, setPri
                         <button
                             key={p.key}
                             onClick={() => setPlatformKey(p.key)}
-                            className={`py-2.5 px-1 rounded-lg text-xs font-semibold border transition-all leading-tight ${platformKey === p.key ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                            className={`py-3 min-h-[44px] px-1 rounded-lg text-xs font-semibold border transition-all leading-tight ${platformKey === p.key ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
                         >
                             {p.name}
                         </button>
@@ -889,6 +900,10 @@ function QuickFlip({ user, onLogDeal, onLoginClick, cost, setCost, price, setPri
                         <div className="flex justify-between text-slate-500">
                             <span>Margin</span>
                             <span className={`font-semibold ${tc.profit}`}>{margin.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between text-slate-500">
+                            <span>ROI</span>
+                            <span className={`font-semibold ${tc.profit}`}>{costNum > 0 ? `${((profit / costNum) * 100).toFixed(0)}%` : '—'}</span>
                         </div>
                     </div>
                     <button
@@ -937,7 +952,7 @@ function BigInput({ label, value, onChange }) {
 }
 
 // --- Strategy Panel ---
-function StrategyPanel({ product, onPriceChange, onProductChange, onLogDeal, onLoginClick, user }) {
+function StrategyPanel({ product, onPriceChange, onProductChange, onLogDeal, onLoginClick, user, onCopyResult }) {
     const { feePct, feeFlat, price, competitorPrice } = product;
 
     const calcProfit = (p) => computeProfit(product, p, feePct, feeFlat);
@@ -958,8 +973,8 @@ function StrategyPanel({ product, onPriceChange, onProductChange, onLogDeal, onL
     const breakeven = breakevenDenom > 0 ? (totalDirectCost + feeFlat) / breakevenDenom : Infinity;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-3 bg-white p-4 sm:p-6 rounded-xl shadow-md">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="md:col-span-4 bg-white p-4 sm:p-6 rounded-xl shadow-md">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-1">Quick Targets</h3>
@@ -998,7 +1013,14 @@ function StrategyPanel({ product, onPriceChange, onProductChange, onLogDeal, onL
             <StatCard label="Net Profit"      value={fmtUSD(profit)}                                                                    isPositive={profit >= 0} />
             <StatCard label="Net Margin"      value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`}                        isPositive={profit >= 0} />
             <StatCard label="Breakeven Price" value={fmtUSD(breakeven)} />
-            <div className="md:col-span-3 flex justify-end">
+            <StatCard label="ROI" value={totalDirectCost > 0 ? `${((profit / totalDirectCost) * 100).toFixed(0)}%` : '—'} isPositive={profit >= 0} />
+            <div className="md:col-span-4 flex flex-wrap justify-end gap-2">
+              <button
+                onClick={onCopyResult}
+                className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+              >
+                📤 Copy Result
+              </button>
               <button
                 onClick={user ? onLogDeal : onLoginClick}
                 className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors shadow-sm"
@@ -1030,7 +1052,7 @@ const Input = React.forwardRef(({ id, label, type = "text", value, onChange, ico
       <input
         ref={ref} type={type} id={id} value={value} onChange={onChange}
         step={step || (type === 'number' ? '0.01' : undefined)}
-        className={`w-full py-3 px-3 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 transition ${icon ? 'pl-8' : 'pl-3'}`}
+        className={`w-full py-3.5 px-3 border border-slate-300 rounded-lg text-base shadow-sm focus:ring-emerald-500 focus:border-emerald-500 transition ${icon ? 'pl-8' : 'pl-3'}`}
       />
     </div>
   </div>
