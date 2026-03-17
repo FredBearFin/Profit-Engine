@@ -36,7 +36,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- Platform fee presets ---
-// feePct = percentage fee, feeFlat = flat fee per transaction
 const PLATFORMS = [
   { key: 'custom',   name: 'Custom',         feePct: 0,     feeFlat: 0,    note: null },
   { key: 'ebay',     name: 'eBay',           feePct: 13.25, feeFlat: 0,    note: '13.25%' },
@@ -68,6 +67,9 @@ const X = (props) => (
 const Save = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
 );
+const ChevronRight = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="9 18 15 12 9 6" /></svg>
+);
 
 const Spinner = ({ className = '' }) => (
   <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -81,6 +83,28 @@ const fmtUSD = (n) => (isFinite(n) ? n : 0).toLocaleString('en-US', { style: 'cu
 const roundNickel = (n) => Number((Math.round(n / 0.05) * 0.05).toFixed(2));
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
+// Central profit calculation — used by all components so hidden costs are never missed
+const computeProfit = (product, price, feePct, feeFlat) => {
+  const { landed = 0, ship = 0, pack = 0, returnRate = 0, timeCostHr = 0, timeCostMin = 0 } = product;
+  const timeCost = (timeCostHr * timeCostMin) / 60;
+  const totalDirectCost = landed + ship + pack + timeCost;
+  const fees = price * (feePct / 100) + feeFlat;
+  const returnLoss = (returnRate / 100) * price;
+  return price - totalDirectCost - fees - returnLoss;
+};
+
+// Suggested price at a target margin, accounting for all cost fields
+const suggestPrice = (product, feePct, feeFlat, targetMargin = 0.33) => {
+  const { landed = 0, ship = 0, pack = 0, returnRate = 0, timeCostHr = 0, timeCostMin = 0 } = product;
+  const timeCost = (timeCostHr * timeCostMin) / 60;
+  const totalCost = landed + ship + pack + timeCost;
+  const f = feePct / 100;
+  const r = (returnRate || 0) / 100;
+  const denom = 1 - f - r - targetMargin;
+  if (denom <= 0) return null;
+  return roundNickel((totalCost + feeFlat) / denom);
+};
+
 const createBlankProduct = () => ({
     name: 'Untitled Product',
     platform: 'custom',
@@ -89,6 +113,9 @@ const createBlankProduct = () => ({
     pack: 0.50,
     feePct: 15,
     feeFlat: 0.00,
+    returnRate: 0,
+    timeCostHr: 0,
+    timeCostMin: 0,
     price: 19.99,
     minPrice: 10,
     maxPrice: 50,
@@ -107,7 +134,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [toast, setToast] = useState(null);
-  const [mode, setMode] = useState('calculator'); // 'calculator' | 'quickflip'
+  const [mode, setMode] = useState('calculator');
   const productNameInputRef = useRef(null);
 
   const selectedProductData = products.find(p => p.id === selectedProductId);
@@ -204,14 +231,11 @@ export default function App() {
   const handleProductChange = (field, value) => {
     if (!selectedProductData) return;
     const updatedFields = { [field]: value };
-    const costFields = ['landed', 'ship', 'pack', 'feePct', 'feeFlat'];
+    const costFields = ['landed', 'ship', 'pack', 'feePct', 'feeFlat', 'returnRate', 'timeCostHr', 'timeCostMin'];
     if (costFields.includes(field)) {
       const current = { ...selectedProductData, ...updatedFields };
-      const totalCost = current.landed + current.ship + current.pack;
-      const f = current.feePct / 100;
-      const denom = 1 - f - 0.33;
-      if (denom > 0) {
-        const suggested = roundNickel((totalCost + current.feeFlat) / denom);
+      const suggested = suggestPrice(current, current.feePct, current.feeFlat);
+      if (suggested !== null) {
         updatedFields.price = suggested;
         updatedFields.minPrice = Math.round(suggested * 0.5);
         updatedFields.maxPrice = Math.round(suggested * 2);
@@ -221,17 +245,13 @@ export default function App() {
     setProducts(products.map(p => p.id === selectedProductId ? updated : p));
   };
 
-  // Batch-update fees + recalculate price when a platform preset is selected
   const handlePlatformSelect = (platformKey) => {
     const platform = PLATFORMS.find(p => p.key === platformKey);
     if (!platform || !selectedProductData) return;
-    const { landed, ship, pack } = selectedProductData;
-    const totalCost = landed + ship + pack;
-    const f = platform.feePct / 100;
-    const denom = 1 - f - 0.33;
     const updatedFields = { platform: platformKey, feePct: platform.feePct, feeFlat: platform.feeFlat };
-    if (denom > 0) {
-      const suggested = roundNickel((totalCost + platform.feeFlat) / denom);
+    const productWithNewFees = { ...selectedProductData, ...updatedFields };
+    const suggested = suggestPrice(productWithNewFees, platform.feePct, platform.feeFlat);
+    if (suggested !== null) {
       updatedFields.price = suggested;
       updatedFields.minPrice = Math.round(suggested * 0.5);
       updatedFields.maxPrice = Math.round(suggested * 2);
@@ -269,7 +289,6 @@ export default function App() {
       <Header user={user} onLoginClick={() => setAuthModalOpen(true)} />
 
       <main className="p-4 md:p-6 lg:p-8">
-        {/* Mode toggle — always visible at top */}
         <div className="flex gap-1.5 mb-6 bg-white p-1.5 rounded-xl shadow-sm max-w-sm">
           <button
             onClick={() => setMode('calculator')}
@@ -312,6 +331,8 @@ export default function App() {
                     user={user}
                     productNameInputRef={productNameInputRef}
                   />
+                  <ProfitBreakdown product={selectedProductData} />
+                  <PlatformComparison product={selectedProductData} />
                   <StrategyPanel
                     product={selectedProductData}
                     onPriceChange={handlePriceChange}
@@ -413,6 +434,7 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
 // --- Calculator ---
 function Calculator({ product, onProductChange, onPlatformSelect, onPriceChange, onSave, isSaving, user, productNameInputRef }) {
     const [salePriceInput, setSalePriceInput] = useState(product.price);
+    const [showHiddenCosts, setShowHiddenCosts] = useState(false);
 
     useEffect(() => { setSalePriceInput(product.price); }, [product.price]);
 
@@ -424,9 +446,11 @@ function Calculator({ product, onProductChange, onPlatformSelect, onPriceChange,
         onPriceChange(clamped);
     };
 
+    const hasHiddenCosts = (product.returnRate > 0) || (product.timeCostHr > 0 && product.timeCostMin > 0);
+
     return (
         <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-            {/* Platform preset selector */}
+            {/* Platform selector */}
             <div className="mb-5">
                 <label className="block text-sm font-medium text-slate-600 mb-2">Platform</label>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
@@ -446,20 +470,76 @@ function Calculator({ product, onProductChange, onPlatformSelect, onPriceChange,
                         Custom
                     </button>
                 </div>
-                {/* Show the note for the selected platform */}
                 {(() => {
                     const sel = PLATFORMS.find(p => p.key === (product.platform || 'custom'));
                     return sel?.note ? <p className="text-xs text-slate-400 mt-1.5">{sel.note}</p> : null;
                 })()}
             </div>
 
+            {/* Core cost inputs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} ref={productNameInputRef} />
-                <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
-                <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
-                <Input id="pack" label="Packaging Cost" type="number" value={product.pack} onChange={e => onProductChange('pack', parseFloat(e.target.value) || 0)} icon="$" />
+                <Input id="landed" label="Item Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
+                <Input id="ship" label="Outbound Shipping" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
+                <Input id="pack" label="Shipping Supplies" type="number" value={product.pack} onChange={e => onProductChange('pack', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="feePct" label="Marketplace Fee %" type="number" value={product.feePct} onChange={e => onProductChange('feePct', parseFloat(e.target.value) || 0)} icon="%" />
                 <Input id="feeFlat" label="Flat Fee" type="number" value={product.feeFlat} onChange={e => onProductChange('feeFlat', parseFloat(e.target.value) || 0)} icon="$" />
+            </div>
+
+            {/* Hidden costs — collapsible */}
+            <div className="mt-5 border-t border-slate-100 pt-4">
+                <button
+                    onClick={() => setShowHiddenCosts(v => !v)}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors w-full text-left"
+                >
+                    <ChevronRight className={`transition-transform duration-200 ${showHiddenCosts ? 'rotate-90' : ''}`} />
+                    Hidden Costs
+                    <span className="text-xs font-normal text-slate-400">— returns, your time</span>
+                    {hasHiddenCosts && (
+                        <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">active</span>
+                    )}
+                </button>
+
+                {showHiddenCosts && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <Input
+                                id="returnRate"
+                                label="Return Rate"
+                                type="number"
+                                value={product.returnRate || 0}
+                                onChange={e => onProductChange('returnRate', parseFloat(e.target.value) || 0)}
+                                icon="%"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">% of sales that get returned</p>
+                        </div>
+                        <div>
+                            <Input
+                                id="timeCostHr"
+                                label="Your hourly rate"
+                                type="number"
+                                value={product.timeCostHr || 0}
+                                onChange={e => onProductChange('timeCostHr', parseFloat(e.target.value) || 0)}
+                                icon="$"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">What your time is worth/hr</p>
+                        </div>
+                        <div>
+                            <Input
+                                id="timeCostMin"
+                                label="Minutes per item"
+                                type="number"
+                                value={product.timeCostMin || 0}
+                                onChange={e => onProductChange('timeCostMin', parseFloat(e.target.value) || 0)}
+                            />
+                            {product.timeCostHr > 0 && product.timeCostMin > 0 && (
+                                <p className="text-xs text-emerald-600 mt-1 font-semibold">
+                                    = {fmtUSD((product.timeCostHr * product.timeCostMin) / 60)} per item
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <hr className="my-6 border-slate-200" />
@@ -508,8 +588,141 @@ function Calculator({ product, onProductChange, onPlatformSelect, onPriceChange,
     );
 }
 
+// --- Profit Breakdown Visualization ---
+// Pure CSS stacked bar — no chart library needed
+function ProfitBreakdown({ product }) {
+    const { landed = 0, ship = 0, pack = 0, feePct, feeFlat, price, returnRate = 0, timeCostHr = 0, timeCostMin = 0 } = product;
+    const timeCost = (timeCostHr * timeCostMin) / 60;
+    const returnLoss = (returnRate / 100) * price;
+    const platformFees = price * (feePct / 100) + feeFlat;
+    const profit = computeProfit(product, price, feePct, feeFlat);
+
+    if (price <= 0) return null;
+
+    const hasHiddenCosts = timeCost > 0 || returnLoss > 0;
+
+    const segments = [
+        { label: 'Item cost',        value: landed,               color: 'bg-slate-500',   dot: 'bg-slate-500' },
+        { label: 'Ship + supplies',  value: ship + pack,          color: 'bg-sky-400',     dot: 'bg-sky-400' },
+        { label: 'Platform fee',     value: platformFees,         color: 'bg-amber-400',   dot: 'bg-amber-400' },
+    ];
+
+    if (hasHiddenCosts) {
+        segments.push({ label: 'Returns & time', value: returnLoss + timeCost, color: 'bg-orange-400', dot: 'bg-orange-400' });
+    }
+
+    if (profit >= 0) {
+        segments.push({ label: 'Your profit', value: profit, color: 'bg-emerald-500', dot: 'bg-emerald-500' });
+    } else {
+        // Loss: extend the bar visually beyond 100% with a red overflow indicator
+        segments.push({ label: 'Loss', value: Math.abs(profit), color: 'bg-red-500', dot: 'bg-red-500' });
+    }
+
+    // Clamp widths to 0–100% of price for display purposes
+    const total = segments.reduce((s, seg) => s + Math.max(0, seg.value), 0);
+    const displayTotal = Math.max(total, price);
+
+    return (
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
+            <h3 className="text-lg font-bold text-slate-800 mb-1">Profit Breakdown</h3>
+            <p className="text-sm text-slate-500 mb-4">Where your {fmtUSD(price)} goes.</p>
+
+            {/* Stacked bar */}
+            <div className="flex h-10 rounded-xl overflow-hidden mb-5 gap-px">
+                {segments.map((seg, i) => (
+                    <div
+                        key={i}
+                        title={`${seg.label}: ${fmtUSD(seg.value)}`}
+                        className={`${seg.color} transition-all duration-500 first:rounded-l-xl last:rounded-r-xl`}
+                        style={{ width: `${Math.max(0, (seg.value / displayTotal) * 100)}%`, minWidth: seg.value > 0 ? '2px' : '0' }}
+                    />
+                ))}
+            </div>
+
+            {/* Legend */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {segments.map((seg, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                        <div className={`w-3 h-3 rounded-sm flex-shrink-0 mt-0.5 ${seg.dot}`} />
+                        <div className="min-w-0">
+                            <p className="text-xs text-slate-500 leading-tight">{seg.label}</p>
+                            <p className={`text-sm font-bold ${seg.label === 'Your profit' ? 'text-emerald-600' : seg.label === 'Loss' ? 'text-red-500' : 'text-slate-800'}`}>
+                                {fmtUSD(seg.value)}
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// --- Platform Comparison Table ---
+// Shows profit and margin for the current item across all platforms, sorted best first
+function PlatformComparison({ product }) {
+    const { price } = product;
+
+    const results = PLATFORMS
+        .filter(p => p.key !== 'custom')
+        .map(p => {
+            const profit = computeProfit(product, price, p.feePct, p.feeFlat);
+            const margin = price > 0 ? (profit / price) * 100 : 0;
+            const fees = price * (p.feePct / 100) + p.feeFlat;
+            return { ...p, profit, margin, fees };
+        })
+        .sort((a, b) => b.margin - a.margin);
+
+    const maxMargin = Math.max(...results.map(r => r.margin), 0);
+
+    return (
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
+            <h3 className="text-lg font-bold text-slate-800 mb-1">Platform Comparison</h3>
+            <p className="text-sm text-slate-500 mb-4">Same item at {fmtUSD(price)} — where should you list?</p>
+
+            <div className="space-y-2">
+                {results.map((r, i) => (
+                    <div
+                        key={r.key}
+                        className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${i === 0 ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'bg-slate-50'}`}
+                    >
+                        {/* Platform name + fee note */}
+                        <div className="w-32 flex-shrink-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                {i === 0 && (
+                                    <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">BEST</span>
+                                )}
+                                <p className="text-sm font-semibold text-slate-800">{r.name}</p>
+                            </div>
+                            <p className="text-xs text-slate-400">{r.note}</p>
+                        </div>
+
+                        {/* Relative margin bar */}
+                        <div className="flex-1 min-w-0">
+                            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-500 ${r.margin <= 0 ? 'bg-red-400' : i === 0 ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                                    style={{ width: `${maxMargin > 0 ? Math.max(0, (r.margin / maxMargin) * 100) : 0}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Profit + margin */}
+                        <div className="text-right flex-shrink-0 w-20">
+                            <p className={`text-sm font-bold ${r.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {fmtUSD(r.profit)}
+                            </p>
+                            <p className={`text-xs ${r.margin > 0 ? 'text-slate-500' : 'text-red-400'}`}>
+                                {r.margin.toFixed(1)}%
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // --- Quick Flip Mode ---
-// Stripped-down calculator for fast in-store decisions. No Firebase, fully local.
 function QuickFlip() {
     const [cost, setCost] = useState('');
     const [price, setPrice] = useState('');
@@ -520,8 +733,10 @@ function QuickFlip() {
     const priceNum = parseFloat(price) || 0;
     const hasValues = costNum > 0 && priceNum > 0;
 
+    // Use computeProfit for consistency — pass a minimal product-like object
+    const fakeProduct = { landed: costNum, ship: 0, pack: 0, returnRate: 0, timeCostHr: 0, timeCostMin: 0 };
+    const profit = computeProfit(fakeProduct, priceNum, platform.feePct, platform.feeFlat);
     const fees = priceNum * (platform.feePct / 100) + platform.feeFlat;
-    const profit = priceNum - costNum - fees;
     const margin = priceNum > 0 ? (profit / priceNum) * 100 : 0;
 
     let verdict = null;
@@ -540,7 +755,6 @@ function QuickFlip() {
 
     return (
         <div className="max-w-sm mx-auto space-y-4 pt-1 pb-8">
-            {/* Platform selector */}
             <div className="bg-white rounded-xl shadow-md p-4 sm:p-5">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Platform</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -554,18 +768,14 @@ function QuickFlip() {
                         </button>
                     ))}
                 </div>
-                {platform?.note && (
-                    <p className="text-xs text-slate-400 mt-2.5 text-center">{platform.note}</p>
-                )}
+                {platform?.note && <p className="text-xs text-slate-400 mt-2.5 text-center">{platform.note}</p>}
             </div>
 
-            {/* Cost + Price inputs */}
             <div className="bg-white rounded-xl shadow-md p-4 sm:p-5 space-y-5">
                 <BigInput label="What did you pay?" value={cost} onChange={setCost} />
                 <BigInput label="What's it selling for?" value={price} onChange={setPrice} />
             </div>
 
-            {/* Verdict */}
             {hasValues ? (
                 <div className={`rounded-xl border-2 p-5 ${tc.card}`}>
                     <div className="flex items-start gap-3 mb-4">
@@ -599,15 +809,12 @@ function QuickFlip() {
                     </div>
                 </div>
             ) : (
-                <p className="text-center text-slate-400 text-sm py-6">
-                    Enter your cost and the sale price above.
-                </p>
+                <p className="text-center text-slate-400 text-sm py-6">Enter your cost and the sale price above.</p>
             )}
         </div>
     );
 }
 
-// --- Big number input for Quick Flip ---
 function BigInput({ label, value, onChange }) {
     return (
         <div>
@@ -629,19 +836,24 @@ function BigInput({ label, value, onChange }) {
 
 // --- Strategy Panel ---
 function StrategyPanel({ product, onPriceChange, onProductChange }) {
-    const { landed, ship, pack, feePct, feeFlat, price, competitorPrice } = product;
-    const totalCost = landed + ship + pack;
-    const calculateProfit = (p) => p - totalCost - (p * (feePct / 100) + feeFlat);
-    const profit = calculateProfit(price);
+    const { feePct, feeFlat, price, competitorPrice } = product;
+
+    const calcProfit = (p) => computeProfit(product, p, feePct, feeFlat);
+    const profit = calcProfit(price);
 
     const priceForMargin = (targetMargin) => {
-      const f = feePct / 100;
-      const denom = 1 - f - targetMargin;
-      if (denom <= 0) return NaN;
-      return roundNickel((totalCost + feeFlat) / denom);
+        const p = suggestPrice(product, feePct, feeFlat, targetMargin);
+        return p ?? NaN;
     };
 
     const margins = [0.10, 0.15, 0.20, 0.25, 0.33, 0.40, 0.50, 0.75];
+
+    // Breakeven: price where profit = 0
+    const { landed = 0, ship = 0, pack = 0, returnRate = 0, timeCostHr = 0, timeCostMin = 0 } = product;
+    const timeCost = (timeCostHr * timeCostMin) / 60;
+    const totalDirectCost = landed + ship + pack + timeCost;
+    const breakevenDenom = 1 - feePct / 100 - (returnRate || 0) / 100;
+    const breakeven = breakevenDenom > 0 ? (totalDirectCost + feeFlat) / breakevenDenom : Infinity;
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -672,23 +884,22 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
                                     You are currently <span className={`font-bold ${price < competitorPrice ? 'text-green-600' : 'text-red-600'}`}>{fmtUSD(Math.abs(price - competitorPrice))} {price < competitorPrice ? 'below' : 'above'}</span> them.
                                 </div>
                                 <div className="space-y-2">
-                                    <StrategyButton label="Price to Beat"    newPrice={competitorPrice - 0.50}   profit={calculateProfit(competitorPrice - 0.50)}   onClick={onPriceChange} />
-                                    <StrategyButton label="Price to Match"   newPrice={competitorPrice}           profit={calculateProfit(competitorPrice)}           onClick={onPriceChange} />
-                                    <StrategyButton label="Price for Premium" newPrice={competitorPrice * 1.05}  profit={calculateProfit(competitorPrice * 1.05)}    onClick={onPriceChange} />
+                                    <StrategyButton label="Price to Beat"     newPrice={competitorPrice - 0.50}  profit={calcProfit(competitorPrice - 0.50)}  onClick={onPriceChange} />
+                                    <StrategyButton label="Price to Match"    newPrice={competitorPrice}          profit={calcProfit(competitorPrice)}          onClick={onPriceChange} />
+                                    <StrategyButton label="Price for Premium" newPrice={competitorPrice * 1.05}  profit={calcProfit(competitorPrice * 1.05)}  onClick={onPriceChange} />
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
-            <StatCard label="Net Profit"      value={fmtUSD(profit)} isPositive={profit >= 0} />
-            <StatCard label="Net Margin"      value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`} isPositive={profit >= 0} />
-            <StatCard label="Breakeven Price" value={fmtUSD((1 - feePct / 100) > 0 ? (totalCost + feeFlat) / (1 - feePct / 100) : Infinity)} />
+            <StatCard label="Net Profit"      value={fmtUSD(profit)}                                                                    isPositive={profit >= 0} />
+            <StatCard label="Net Margin"      value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`}                        isPositive={profit >= 0} />
+            <StatCard label="Breakeven Price" value={fmtUSD(breakeven)} />
         </div>
     );
 }
 
-// --- Strategy Button ---
 function StrategyButton({ label, newPrice, profit, onClick }) {
     const roundedPrice = roundNickel(newPrice);
     return (
@@ -701,7 +912,6 @@ function StrategyButton({ label, newPrice, profit, onClick }) {
     );
 }
 
-// --- Input ---
 const Input = React.forwardRef(({ id, label, type = "text", value, onChange, icon, step }, ref) => (
   <div>
     <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
@@ -716,7 +926,6 @@ const Input = React.forwardRef(({ id, label, type = "text", value, onChange, ico
   </div>
 ));
 
-// --- Stat Card ---
 function StatCard({ label, value, isPositive }) {
     const valueColor = isPositive === true ? 'text-green-600' : isPositive === false ? 'text-red-500' : 'text-slate-800';
     return (
@@ -727,7 +936,6 @@ function StatCard({ label, value, isPositive }) {
     );
 }
 
-// --- Auth Modal ---
 function AuthModal({ onClose }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
