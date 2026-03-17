@@ -18,7 +18,8 @@ import {
     deleteDoc,
     serverTimestamp,
     query,
-    orderBy
+    orderBy,
+    limit
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -135,6 +136,10 @@ export default function App() {
   const [isAdding, setIsAdding] = useState(false);
   const [toast, setToast] = useState(null);
   const [mode, setMode] = useState('calculator');
+  const [dealHistory, setDealHistory] = useState([]);
+  const [qfCost, setQfCost] = useState('');
+  const [qfPrice, setQfPrice] = useState('');
+  const [qfPlatform, setQfPlatform] = useState('ebay');
   const productNameInputRef = useRef(null);
 
   const selectedProductData = products.find(p => p.id === selectedProductId);
@@ -164,7 +169,13 @@ export default function App() {
             setProducts([{ id: docRef.id, ...newProductData }]);
             setSelectedProductId(docRef.id);
           }
+          // Load deal history (most recent 200)
+          const histCol = collection(db, 'users', currentUser.uid, 'dealHistory');
+          const histQ = query(histCol, orderBy('loggedAt', 'desc'), limit(200));
+          const histSnap = await getDocs(histQ);
+          setDealHistory(histSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         } else {
+          setDealHistory([]);
           const anonymousProduct = { id: 'anonymous', ...createBlankProduct() };
           setProducts([anonymousProduct]);
           setSelectedProductId('anonymous');
@@ -178,6 +189,44 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  const handleLogDeal = async (product, { silent = false } = {}) => {
+    if (!user) return;
+    const { price, feePct, feeFlat, name, platform } = product;
+    const profit = computeProfit(product, price, feePct, feeFlat);
+    const margin = price > 0 ? (profit / price) * 100 : 0;
+    const platformData = PLATFORMS.find(p => p.key === (platform || 'custom'));
+    const entry = {
+      itemName: name || 'Untitled',
+      platform: platform || 'custom',
+      platformName: platformData?.name || 'Custom',
+      salePrice: parseFloat(price.toFixed(2)),
+      profit: parseFloat(profit.toFixed(2)),
+      margin: parseFloat(margin.toFixed(2)),
+      feePct,
+      feeFlat,
+      loggedAt: serverTimestamp(),
+    };
+    try {
+      const histCol = collection(db, 'users', user.uid, 'dealHistory');
+      const docRef = await addDoc(histCol, entry);
+      // Optimistic local update — use current time since serverTimestamp() resolves async
+      setDealHistory(prev => [{ id: docRef.id, ...entry, loggedAt: { toDate: () => new Date() } }, ...prev]);
+      if (!silent) showToast('Deal logged!');
+    } catch (err) {
+      if (!silent) showToast('Failed to log deal.', 'error');
+    }
+  };
+
+  const handleDeleteDeal = async (dealId) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'dealHistory', dealId));
+      setDealHistory(prev => prev.filter(d => d.id !== dealId));
+    } catch (err) {
+      showToast('Failed to delete entry.', 'error');
+    }
+  };
+
   const handleSaveProduct = async () => {
     if (!user) { setAuthModalOpen(true); return; }
     if (!selectedProductData || selectedProductData.id === 'anonymous') return;
@@ -186,7 +235,7 @@ export default function App() {
       const { id, ...dataToSave } = selectedProductData;
       const productDoc = doc(db, 'users', user.uid, 'products', id);
       await updateDoc(productDoc, dataToSave);
-      showToast('Product saved!');
+      showToast('Saved!');
     } catch (err) {
       showToast('Failed to save. Try again.', 'error');
     } finally {
@@ -289,7 +338,7 @@ export default function App() {
       <Header user={user} onLoginClick={() => setAuthModalOpen(true)} />
 
       <main className="p-4 md:p-6 lg:p-8">
-        <div className="flex gap-1.5 mb-6 bg-white p-1.5 rounded-xl shadow-sm max-w-sm">
+        <div className="flex gap-1.5 mb-6 bg-white p-1.5 rounded-xl shadow-sm max-w-lg">
           <button
             onClick={() => setMode('calculator')}
             className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'calculator' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
@@ -302,10 +351,33 @@ export default function App() {
           >
             ⚡ Quick Flip
           </button>
+          <button
+            onClick={() => setMode('history')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${mode === 'history' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            📋 History
+            {dealHistory.length > 0 && (
+              <span className="ml-1.5 text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">{dealHistory.length >= 200 ? '200+' : dealHistory.length}</span>
+            )}
+          </button>
         </div>
 
-        {mode === 'quickflip' ? (
-          <QuickFlip />
+        {mode === 'history' ? (
+          <DealHistory
+            dealHistory={dealHistory}
+            onDeleteDeal={handleDeleteDeal}
+            user={user}
+            onLoginClick={() => setAuthModalOpen(true)}
+          />
+        ) : mode === 'quickflip' ? (
+          <QuickFlip
+            user={user}
+            onLogDeal={handleLogDeal}
+            onLoginClick={() => setAuthModalOpen(true)}
+            cost={qfCost} setCost={setQfCost}
+            price={qfPrice} setPrice={setQfPrice}
+            platformKey={qfPlatform} setPlatformKey={setQfPlatform}
+          />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {user && (
@@ -337,6 +409,9 @@ export default function App() {
                     product={selectedProductData}
                     onPriceChange={handlePriceChange}
                     onProductChange={handleProductChange}
+                    onLogDeal={() => handleLogDeal(selectedProductData)}
+                    onLoginClick={() => setAuthModalOpen(true)}
+                    user={user}
                   />
                 </div>
               ) : (
@@ -723,10 +798,7 @@ function PlatformComparison({ product }) {
 }
 
 // --- Quick Flip Mode ---
-function QuickFlip() {
-    const [cost, setCost] = useState('');
-    const [price, setPrice] = useState('');
-    const [platformKey, setPlatformKey] = useState('ebay');
+function QuickFlip({ user, onLogDeal, onLoginClick, cost, setCost, price, setPrice, platformKey, setPlatformKey }) {
 
     const platform = PLATFORMS.find(p => p.key === platformKey);
     const costNum = parseFloat(cost) || 0;
@@ -807,6 +879,24 @@ function QuickFlip() {
                             <span className={`font-semibold ${tc.profit}`}>{margin.toFixed(1)}%</span>
                         </div>
                     </div>
+                    <button
+                        onClick={() => {
+                            if (!user) { onLoginClick(); return; }
+                            const qfProduct = {
+                                name: 'Quick Flip',
+                                platform: platformKey,
+                                price: priceNum,
+                                landed: costNum,
+                                ship: 0, pack: 0, returnRate: 0, timeCostHr: 0, timeCostMin: 0,
+                                feePct: platform.feePct,
+                                feeFlat: platform.feeFlat,
+                            };
+                            onLogDeal(qfProduct);
+                        }}
+                        className="mt-4 w-full flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors"
+                    >
+                        📋 {user ? 'Log This Deal' : 'Log In to Save Deals'}
+                    </button>
                 </div>
             ) : (
                 <p className="text-center text-slate-400 text-sm py-6">Enter your cost and the sale price above.</p>
@@ -835,7 +925,7 @@ function BigInput({ label, value, onChange }) {
 }
 
 // --- Strategy Panel ---
-function StrategyPanel({ product, onPriceChange, onProductChange }) {
+function StrategyPanel({ product, onPriceChange, onProductChange, onLogDeal, onLoginClick, user }) {
     const { feePct, feeFlat, price, competitorPrice } = product;
 
     const calcProfit = (p) => computeProfit(product, p, feePct, feeFlat);
@@ -896,6 +986,14 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
             <StatCard label="Net Profit"      value={fmtUSD(profit)}                                                                    isPositive={profit >= 0} />
             <StatCard label="Net Margin"      value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`}                        isPositive={profit >= 0} />
             <StatCard label="Breakeven Price" value={fmtUSD(breakeven)} />
+            <div className="md:col-span-3 flex justify-end">
+              <button
+                onClick={user ? onLogDeal : onLoginClick}
+                className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+              >
+                📋 {user ? 'Log This Deal' : 'Log In to Save Deals'}
+              </button>
+            </div>
         </div>
     );
 }
@@ -932,6 +1030,124 @@ function StatCard({ label, value, isPositive }) {
         <div className="bg-white p-4 rounded-xl shadow-md text-center">
             <h3 className="text-sm font-medium text-slate-500">{label}</h3>
             <p className={`text-3xl font-bold mt-1 ${valueColor}`}>{value}</p>
+        </div>
+    );
+}
+
+// --- Deal History ---
+function DealHistory({ dealHistory, onDeleteDeal, user, onLoginClick }) {
+    const [pendingDeleteId, setPendingDeleteId] = useState(null);
+    if (!user) {
+        return (
+            <div className="max-w-lg mx-auto bg-white rounded-xl shadow-md p-10 text-center">
+                <p className="text-4xl mb-3">📋</p>
+                <p className="text-lg font-bold text-slate-800 mb-1">Your deal log lives here</p>
+                <p className="text-slate-500 text-sm mb-6">Every calculation you save gets logged automatically — platform, price, profit, date.</p>
+                <button
+                    onClick={onLoginClick}
+                    className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors shadow"
+                >
+                    Log In / Sign Up
+                </button>
+            </div>
+        );
+    }
+
+    if (dealHistory.length === 0) {
+        return (
+            <div className="max-w-lg mx-auto bg-white rounded-xl shadow-md p-10 text-center">
+                <p className="text-4xl mb-3">📋</p>
+                <p className="text-lg font-bold text-slate-800 mb-1">No deals logged yet</p>
+                <p className="text-slate-500 text-sm">Use the "Log This Deal" button on any calculation to start your deal log.</p>
+            </div>
+        );
+    }
+
+    const totalProfit = dealHistory.reduce((s, d) => s + (d.profit || 0), 0);
+    const avgMargin = dealHistory.reduce((s, d) => s + (d.margin || 0), 0) / dealHistory.length;
+    const winners = dealHistory.filter(d => d.margin >= 20).length;
+
+    return (
+        <div className="max-w-2xl mx-auto space-y-5">
+            {/* Aggregate stats */}
+            <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-xl shadow-md p-4 text-center">
+                    <p className="text-xs font-medium text-slate-500 mb-1">Deals Logged</p>
+                    <p className="text-3xl font-bold text-slate-800">{dealHistory.length}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-md p-4 text-center">
+                    <p className="text-xs font-medium text-slate-500 mb-1">Total Profit</p>
+                    <p className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtUSD(totalProfit)}</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-md p-4 text-center">
+                    <p className="text-xs font-medium text-slate-500 mb-1">Avg Margin</p>
+                    <p className="text-3xl font-bold text-slate-800">{avgMargin.toFixed(1)}%</p>
+                </div>
+            </div>
+
+            {/* Winners callout */}
+            {winners > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-700 font-medium text-center">
+                    🏆 {winners} of your {dealHistory.length} deals hit 20%+ margin
+                </div>
+            )}
+
+            {/* Deal list */}
+            <div className="bg-white rounded-xl shadow-md overflow-hidden divide-y divide-slate-100">
+                {dealHistory.map(deal => {
+                    const rawDate = deal.loggedAt?.toDate ? deal.loggedAt.toDate() : new Date();
+                    const dateStr = rawDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    const marginColor = deal.margin >= 20 ? 'text-emerald-600' : deal.margin >= 10 ? 'text-amber-600' : 'text-red-500';
+
+                    return (
+                        <div key={deal.id} className="flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors">
+                            {/* Margin indicator dot */}
+                            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${deal.margin >= 20 ? 'bg-emerald-500' : deal.margin >= 10 ? 'bg-amber-400' : 'bg-red-400'}`} />
+
+                            {/* Item info */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-semibold text-slate-800 truncate">{deal.itemName}</p>
+                                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full flex-shrink-0">{deal.platformName}</span>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">{dateStr} · listed at {fmtUSD(deal.salePrice)}</p>
+                            </div>
+
+                            {/* Profit + margin */}
+                            <div className="text-right flex-shrink-0">
+                                <p className={`font-bold ${deal.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtUSD(deal.profit)}</p>
+                                <p className={`text-xs font-semibold ${marginColor}`}>{deal.margin?.toFixed(1)}%</p>
+                            </div>
+
+                            {/* Delete — two-step confirm */}
+                            {pendingDeleteId === deal.id ? (
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                    <button
+                                        onClick={() => { onDeleteDeal(deal.id); setPendingDeleteId(null); }}
+                                        className="text-xs font-semibold text-red-500 hover:text-red-700 px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition-colors"
+                                    >
+                                        Delete
+                                    </button>
+                                    <button
+                                        onClick={() => setPendingDeleteId(null)}
+                                        className="text-slate-400 hover:text-slate-600 p-1 transition-colors"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setPendingDeleteId(deal.id)}
+                                    className="text-slate-300 hover:text-red-400 transition-colors p-1 flex-shrink-0"
+                                    title="Remove from history"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }
