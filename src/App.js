@@ -1,29 +1,26 @@
-// Import React and hooks. useRef is included for future use if needed.
 import React, { useState, useEffect, useRef } from 'react';
 
-// --- Firebase imports for authentication and Firestore database ---
 import { initializeApp } from "firebase/app";
-import { 
-    getAuth, 
-    onAuthStateChanged, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signOut 
+import {
+    getAuth,
+    onAuthStateChanged,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut
 } from "firebase/auth";
-import { 
-    getFirestore, 
-    collection, 
-    doc, 
-    addDoc, 
-    getDocs, 
-    updateDoc, 
+import {
+    getFirestore,
+    collection,
+    doc,
+    addDoc,
+    getDocs,
+    updateDoc,
     deleteDoc,
     serverTimestamp,
     query,
     orderBy
 } from "firebase/firestore";
 
-// --- Your Firebase project configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyB4z-JrEmvqtzshnsvEO_wTWWQ-eId5MOo",
   authDomain: "dropship-profit-calculator.firebaseapp.com",
@@ -34,12 +31,11 @@ const firebaseConfig = {
   measurementId: "G-5X8WP42KQ8"
 };
 
-// --- Initialize Firebase app, authentication, and Firestore database ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- SVG Icon Components for UI buttons ---
+// --- SVG Icon Components ---
 const PlusCircle = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
 );
@@ -59,12 +55,19 @@ const Save = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
 );
 
-// --- Utility functions for formatting and calculations ---
+// --- Spinner: animated loading indicator ---
+const Spinner = ({ className = '' }) => (
+    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+);
+
+// --- Utility functions ---
 const fmtUSD = (n) => (isFinite(n) ? n : 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const roundNickel = (n) => Number((Math.round(n / 0.05) * 0.05).toFixed(2));
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-// --- Function to create a blank product object with default values ---
 const createBlankProduct = () => ({
     name: 'Untitled Product',
     landed: 5.00,
@@ -86,103 +89,120 @@ export default function App() {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  // STEP 2: Add productNameInputRef
+  const [loadError, setLoadError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [toast, setToast] = useState(null);
   const productNameInputRef = useRef(null);
 
-  // Find the currently selected product object
   const selectedProductData = products.find(p => p.id === selectedProductId);
 
-  // --- Listen for authentication changes and load products ---
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // --- Auth state listener + load products ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setIsLoading(true);
+      setLoadError(null);
       setUser(currentUser);
-      if (currentUser) {
-        // If logged in, load products from Firestore
-        const productsCollection = collection(db, 'users', currentUser.uid, 'products');
-        const q = query(productsCollection, orderBy("createdAt", "desc"));
-        const productSnapshot = await getDocs(q);
-        const userProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      try {
+        if (currentUser) {
+          const productsCollection = collection(db, 'users', currentUser.uid, 'products');
+          const q = query(productsCollection, orderBy("createdAt", "desc"));
+          const productSnapshot = await getDocs(q);
+          const userProducts = productSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        if (userProducts.length > 0) {
-          setProducts(userProducts);
-          setSelectedProductId(userProducts[0].id);
+          if (userProducts.length > 0) {
+            setProducts(userProducts);
+            setSelectedProductId(userProducts[0].id);
+          } else {
+            const newProductData = createBlankProduct();
+            const docRef = await addDoc(productsCollection, newProductData);
+            setProducts([{ id: docRef.id, ...newProductData }]);
+            setSelectedProductId(docRef.id);
+          }
         } else {
-          // If no products, create a blank one
-          const newProductData = createBlankProduct();
-          const docRef = await addDoc(productsCollection, newProductData);
-          setProducts([{ id: docRef.id, ...newProductData }]);
-          setSelectedProductId(docRef.id);
+          const anonymousProduct = { id: 'anonymous', ...createBlankProduct() };
+          setProducts([anonymousProduct]);
+          setSelectedProductId('anonymous');
         }
-      } else {
-        // If not logged in, use a single anonymous product
-        const anonymousProduct = { id: 'anonymous', ...createBlankProduct() };
-        setProducts([anonymousProduct]);
-        setSelectedProductId('anonymous');
+      } catch (err) {
+        setLoadError('Could not connect to the database. Check your connection and try again.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // --- Save product changes to Firestore ---
+  // --- Save product to Firestore ---
   const handleSaveProduct = async () => {
-    if (!user) {
-      setAuthModalOpen(true);
-      return;
-    }
+    if (!user) { setAuthModalOpen(true); return; }
     if (!selectedProductData || selectedProductData.id === 'anonymous') return;
-    
-    const { id, ...dataToSave } = selectedProductData;
-    const productDoc = doc(db, 'users', user.uid, 'products', id);
-    await updateDoc(productDoc, dataToSave);
-    alert('Product Saved!');
+    setIsSaving(true);
+    try {
+      const { id, ...dataToSave } = selectedProductData;
+      const productDoc = doc(db, 'users', user.uid, 'products', id);
+      await updateDoc(productDoc, dataToSave);
+      showToast('Product saved!');
+    } catch (err) {
+      showToast('Failed to save. Try again.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // --- Replace the old handleAddNewProduct function with the new one ---
+  // --- Add a new product ---
   const handleAddNewProduct = async () => {
-    if (!user) return;
-    const productsCollection = collection(db, 'users', user.uid, 'products');
-    const newProductData = createBlankProduct();
-    const docRef = await addDoc(productsCollection, newProductData);
-    const newProduct = { id: docRef.id, ...newProductData };
-    setProducts([newProduct, ...products]);
-    setSelectedProductId(docRef.id);
-
-    // Focus and select the product name input after adding a new product
-    setTimeout(() => {
-      productNameInputRef.current?.focus();
-      productNameInputRef.current?.select();
-    }, 0);
+    if (!user || isAdding) return;
+    setIsAdding(true);
+    try {
+      const productsCollection = collection(db, 'users', user.uid, 'products');
+      const newProductData = createBlankProduct();
+      const docRef = await addDoc(productsCollection, newProductData);
+      const newProduct = { id: docRef.id, ...newProductData };
+      setProducts([newProduct, ...products]);
+      setSelectedProductId(docRef.id);
+      setTimeout(() => {
+        productNameInputRef.current?.focus();
+        productNameInputRef.current?.select();
+      }, 0);
+    } catch (err) {
+      showToast('Failed to add product. Try again.', 'error');
+    } finally {
+      setIsAdding(false);
+    }
   };
 
-  // --- Delete a product for the user ---
+  // --- Delete a product ---
   const handleDeleteProduct = async (productId) => {
     if (!user || products.length <= 1) return;
-    const productDoc = doc(db, 'users', user.uid, 'products', productId);
-    await deleteDoc(productDoc);
-    const newProducts = products.filter(p => p.id !== productId);
-    setProducts(newProducts);
-    setSelectedProductId(newProducts[0]?.id || null);
+    try {
+      const productDoc = doc(db, 'users', user.uid, 'products', productId);
+      await deleteDoc(productDoc);
+      const newProducts = products.filter(p => p.id !== productId);
+      setProducts(newProducts);
+      setSelectedProductId(newProducts[0]?.id || null);
+    } catch (err) {
+      showToast('Failed to delete. Try again.', 'error');
+    }
   };
 
-  // --- Handle changes to product fields ---
+  // --- Handle product field changes ---
   const handleProductChange = (field, value) => {
     if (!selectedProductData) return;
-
     const updatedFields = { [field]: value };
     const costFields = ['landed', 'ship', 'pack', 'feePct', 'feeFlat'];
 
-    // If a cost field changes, recalculate suggested price and min/max
     if (costFields.includes(field)) {
         const currentProduct = { ...selectedProductData, ...updatedFields };
         const { landed, ship, pack, feePct, feeFlat } = currentProduct;
-        
         const totalCost = landed + ship + pack;
         const f = feePct / 100;
-        const targetMargin = 0.33;
-        const denom = 1 - f - targetMargin;
-
+        const denom = 1 - f - 0.33;
         if (denom > 0) {
             const suggestedPrice = roundNickel((totalCost + feeFlat) / denom);
             updatedFields.price = suggestedPrice;
@@ -190,98 +210,119 @@ export default function App() {
             updatedFields.maxPrice = Math.round(suggestedPrice * 2);
         }
     }
-
-    // Update product in state
     const updatedProduct = { ...selectedProductData, ...updatedFields };
     setProducts(products.map(p => p.id === selectedProductId ? updatedProduct : p));
   };
-  
-  // --- Handle price changes (from slider, buttons, etc) ---
+
   const handlePriceChange = (newPrice) => {
       if (!selectedProductData) return;
-      const min = selectedProductData.minPrice;
-      const max = selectedProductData.maxPrice;
-      // Clamp and round price before updating
-      const clampedPrice = roundNickel(clamp(newPrice, min, max));
+      const clampedPrice = roundNickel(clamp(newPrice, selectedProductData.minPrice, selectedProductData.maxPrice));
       handleProductChange('price', clampedPrice);
-  }
+  };
 
-  // --- Show loading spinner while fetching data ---
+  // --- Loading screen ---
   if (isLoading) {
-    return <div className="w-full h-screen flex items-center justify-center bg-slate-100"><p>Loading Profit Engine...</p></div>
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <Spinner className="w-10 h-10 text-emerald-600" />
+        <p className="text-slate-500 text-sm font-medium">Loading Profit Engine...</p>
+      </div>
+    );
   }
 
-  // --- Main UI layout ---
+  // --- Error screen ---
+  if (loadError) {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 p-6 text-center">
+        <p className="text-red-500 font-semibold">{loadError}</p>
+        <button onClick={() => window.location.reload()} className="text-sm text-emerald-600 font-semibold underline">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-slate-100 min-h-screen font-sans">
+    <div className="bg-slate-50 min-h-screen font-sans">
       <Header user={user} onLoginClick={() => setAuthModalOpen(true)} />
-      
+
       <main className="p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar only shown for logged-in users */}
           {user && (
-            <ProductSidebar 
+            <ProductSidebar
               products={products}
               selectedProductId={selectedProductId}
               onSelectProduct={setSelectedProductId}
               onAddProduct={handleAddNewProduct}
               onDeleteProduct={handleDeleteProduct}
+              isAdding={isAdding}
             />
           )}
           <div className={user ? "lg:col-span-3" : "lg:col-span-4"}>
-             {selectedProductData ? (
-                <div className="space-y-6">
-                    {/* Calculator and StrategyPanel for selected product */}
-                    <Calculator 
-                      product={selectedProductData} 
-                      onProductChange={handleProductChange}
-                      onPriceChange={handlePriceChange}
-                      onSave={handleSaveProduct}
-                      user={user}
-                      productNameInputRef={productNameInputRef} // Add this prop
-                    />
-                    <StrategyPanel 
-                      product={selectedProductData}
-                      onPriceChange={handlePriceChange}
-                      onProductChange={handleProductChange}
-                    />
-                </div>
-             ) : (
-                <div className="bg-white p-6 rounded-xl shadow-md text-center">
-                    <p>Select a product or add a new one.</p>
-                </div>
-             )}
+            {selectedProductData ? (
+              <div className="space-y-6">
+                <Calculator
+                  product={selectedProductData}
+                  onProductChange={handleProductChange}
+                  onPriceChange={handlePriceChange}
+                  onSave={handleSaveProduct}
+                  isSaving={isSaving}
+                  user={user}
+                  productNameInputRef={productNameInputRef}
+                />
+                <StrategyPanel
+                  product={selectedProductData}
+                  onPriceChange={handlePriceChange}
+                  onProductChange={handleProductChange}
+                />
+              </div>
+            ) : (
+              <div className="bg-white p-6 rounded-xl shadow-md text-center">
+                <p>Select a product or add a new one.</p>
+              </div>
+            )}
           </div>
         </div>
       </main>
-      {/* Show authentication modal if needed */}
+
       {isAuthModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+
+      {/* Toast notification */}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-lg z-50 text-sm font-semibold text-white transition-all ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
 
-// --- Header component: shows app title and login/logout buttons ---
+// --- Header ---
 function Header({ user, onLoginClick }) {
   return (
-    <header className="bg-white shadow-sm p-4 flex justify-between items-center">
+    <header className="bg-slate-900 shadow-lg p-4 flex justify-between items-center">
       <div className="flex items-center gap-3">
-        {/* App logo */}
-        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 256 256" className="text-teal-600"><path fill="currentColor" d="M244 56.7a15.9 15.9 0 0 0-10.5-4.4c-2.4-.2-111.2-1-111.2-1s-108.8.8-111.2 1a15.9 15.9 0 0 0-10.5 4.4A16.1 16.1 0 0 0 12 67.3v121.4a16.1 16.1 0 0 0 8.6 14.6a15.9 15.9 0 0 0 15.4 0l106.2-53.1l106.2 53.1a15.9 15.9 0 0 0 15.4 0a16.1 16.1 0 0 0 8.6-14.6V67.3a16.1 16.1 0 0 0-8-10.6ZM128 140.5L28 192V64l100 50v26.5Zm100 51.5L132 142.8V114l100-50v128Z"/></svg>
-        <h1 className="text-xl md:text-2xl font-bold text-slate-800">Profit Engine</h1>
+        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#059669"/>
+          <polyline points="4,32 13,20 21,25 34,8" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <polyline points="27,6 34,6 34,13" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">Profit Engine</h1>
+          <p className="text-xs text-emerald-400 hidden md:block">the profit calculator built for resellers.</p>
+        </div>
       </div>
       <div>
         {user ? (
-          // Show logout button if logged in
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-600 hidden md:block">Welcome, {user.email}</span>
-            <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-800 transition-colors">
+            <span className="text-sm text-slate-400 hidden md:block">{user.email}</span>
+            <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors">
               <LogOut className="w-5 h-5" />
               <span className="hidden md:block">Logout</span>
             </button>
           </div>
         ) : (
-          // Show login/signup button if not logged in
-          <button onClick={onLoginClick} className="flex items-center gap-2 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors shadow">
+          <button onClick={onLoginClick} className="flex items-center gap-2 text-sm font-semibold bg-emerald-500 text-white px-4 py-2 rounded-lg hover:bg-emerald-400 transition-colors shadow">
             <LogIn className="w-5 h-5" />
             Login / Sign Up
           </button>
@@ -291,8 +332,8 @@ function Header({ user, onLoginClick }) {
   );
 }
 
-// --- Sidebar for product selection and management ---
-function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddProduct, onDeleteProduct }) {
+// --- Product Sidebar ---
+function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddProduct, onDeleteProduct, isAdding }) {
   return (
     <aside className="lg:col-span-1 bg-white p-4 rounded-xl shadow-md">
       <h2 className="text-lg font-bold text-slate-800 mb-4">My Products</h2>
@@ -301,64 +342,57 @@ function ProductSidebar({ products, selectedProductId, onSelectProduct, onAddPro
           <div
             key={product.id}
             onClick={() => onSelectProduct(product.id)}
-            className={`p-3 rounded-lg cursor-pointer flex justify-between items-center transition-colors ${selectedProductId === product.id ? 'bg-teal-100 text-teal-800' : 'hover:bg-slate-100'}`}
+            className={`p-3 rounded-lg cursor-pointer flex justify-between items-center transition-colors ${selectedProductId === product.id ? 'bg-emerald-100 text-emerald-800' : 'hover:bg-slate-100'}`}
           >
             <span className="font-semibold truncate pr-2">{product.name || 'Untitled Product'}</span>
             {products.length > 1 && (
-              <button onClick={(e) => { e.stopPropagation(); onDeleteProduct(product.id); }} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeleteProduct(product.id); }}
+                className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 p-1"
+              >
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
           </div>
         ))}
       </div>
-      <button onClick={onAddProduct} className="mt-4 w-full flex items-center justify-center gap-2 text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors py-2 rounded-lg hover:bg-teal-50">
-        <PlusCircle className="w-5 h-5" />
-        Add New Product
+      <button
+        onClick={onAddProduct}
+        disabled={isAdding}
+        className="mt-4 w-full flex items-center justify-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors py-2 rounded-lg hover:bg-emerald-50 disabled:opacity-50"
+      >
+        {isAdding ? <Spinner className="w-4 h-4" /> : <PlusCircle className="w-5 h-5" />}
+        {isAdding ? 'Adding...' : 'Add New Product'}
       </button>
     </aside>
   );
 }
 
-// --- Calculator component: handles product pricing and cost inputs ---
-// --- The Sale Price input is now fixed to allow free typing, only clamping on blur or Enter ---
-function Calculator({ product, onProductChange, onPriceChange, onSave, user, productNameInputRef }) {
-    // Local state for sale price input field, so user can type freely
+// --- Calculator ---
+function Calculator({ product, onProductChange, onPriceChange, onSave, isSaving, user, productNameInputRef }) {
     const [salePriceInput, setSalePriceInput] = useState(product.price);
 
-    // Whenever product.price changes (from outside), update local input state
     useEffect(() => {
         setSalePriceInput(product.price);
     }, [product.price]);
 
-    // Update local state as user types (does NOT update product yet)
-    const handleSalePriceInputChange = (e) => {
-        setSalePriceInput(e.target.value);
-    };
+    const handleSalePriceInputChange = (e) => setSalePriceInput(e.target.value);
 
-    // When input loses focus or user presses Enter, clamp and round, then update product
     const handleSalePriceInputCommit = () => {
         let val = parseFloat(salePriceInput);
         if (isNaN(val)) val = product.minPrice;
-        // Clamp and round to nearest nickel
-        const min = product.minPrice;
-        const max = product.maxPrice;
-        const clampedPrice = roundNickel(clamp(val, min, max));
-        setSalePriceInput(clampedPrice); // Update local input
-        onPriceChange(clampedPrice);     // Update product
+        const clampedPrice = roundNickel(clamp(val, product.minPrice, product.maxPrice));
+        setSalePriceInput(clampedPrice);
+        onPriceChange(clampedPrice);
     };
 
-    // If user presses Enter, commit the value
     const handleSalePriceInputKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            handleSalePriceInputCommit();
-        }
+        if (e.key === 'Enter') handleSalePriceInputCommit();
     };
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-md">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Product name and cost inputs */}
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <Input id="name" label="Product Name" value={product.name} onChange={e => onProductChange('name', e.target.value)} ref={productNameInputRef} />
                 <Input id="landed" label="Landed Cost" type="number" value={product.landed} onChange={e => onProductChange('landed', parseFloat(e.target.value) || 0)} icon="$" />
                 <Input id="ship" label="Shipping Cost" type="number" value={product.ship} onChange={e => onProductChange('ship', parseFloat(e.target.value) || 0)} icon="$" />
@@ -369,58 +403,71 @@ function Calculator({ product, onProductChange, onPriceChange, onSave, user, pro
             <hr className="my-6 border-slate-200" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                 <div>
-                    {/* --- Sale Price input section --- */}
+                    {/* Sale Price — flex layout so $ never overlaps the number */}
                     <div className="text-center">
                         <label htmlFor="salePriceInput" className="text-sm font-medium text-slate-600">Sale Price</label>
-                        <div className="mt-1 relative">
-                            <span className="absolute left-0 inset-y-0 flex items-center pl-3 text-2xl text-slate-500">$</span>
-                            <input 
+                        <div className="mt-1 flex items-center justify-center gap-1">
+                            <span className="text-2xl font-bold text-slate-400">$</span>
+                            <input
                                 type="number"
                                 id="salePriceInput"
                                 value={salePriceInput}
                                 onChange={handleSalePriceInputChange}
                                 onBlur={handleSalePriceInputCommit}
                                 onKeyDown={handleSalePriceInputKeyDown}
-                                className="w-full text-center text-4xl font-bold text-teal-700 bg-transparent border-none focus:ring-0"
+                                className="w-36 text-center text-4xl font-bold text-emerald-700 bg-transparent border-none focus:ring-0 min-w-0"
                                 step="0.05"
                             />
                         </div>
                     </div>
-                    {/* --- Sale Price slider and +/- buttons --- */}
-                    <div className="flex items-center gap-4 mt-4">
-                        <button onClick={() => onPriceChange(product.price - 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">-</button>
-                        <input type="range" min={product.minPrice} max={product.maxPrice} step="0.05" value={product.price} onChange={e => onPriceChange(parseFloat(e.target.value))} className="w-full" />
-                        <button onClick={() => onPriceChange(product.price + 0.05)} className="p-2 rounded-full bg-slate-200 hover:bg-slate-300 transition">+</button>
+                    {/* Slider + +/- buttons — larger tap targets for mobile */}
+                    <div className="flex items-center gap-3 mt-4">
+                        <button
+                            onClick={() => onPriceChange(product.price - 0.05)}
+                            className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition text-lg font-bold flex-shrink-0"
+                        >−</button>
+                        <input
+                            type="range"
+                            min={product.minPrice}
+                            max={product.maxPrice}
+                            step="0.05"
+                            value={product.price}
+                            onChange={e => onPriceChange(parseFloat(e.target.value))}
+                            className="w-full"
+                        />
+                        <button
+                            onClick={() => onPriceChange(product.price + 0.05)}
+                            className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 transition text-lg font-bold flex-shrink-0"
+                        >+</button>
                     </div>
                 </div>
-                {/* Min/Max price inputs */}
                 <div className="grid grid-cols-2 gap-4">
                     <Input id="minPrice" label="Min Price" type="number" value={product.minPrice} onChange={e => onProductChange('minPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
                     <Input id="maxPrice" label="Max Price" type="number" value={product.maxPrice} onChange={e => onProductChange('maxPrice', parseInt(e.target.value, 10) || 0)} icon="$" step="1" />
                 </div>
             </div>
-            {/* Save button */}
-            <div className="mt-6 flex justify-end">
-                <button onClick={onSave} className="flex items-center gap-2 font-semibold bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors shadow">
-                    <Save className="w-5 h-5" />
-                    {user ? 'Save Changes' : 'Save & Sign Up'}
+            {/* Save button — full width on mobile, inline on larger screens */}
+            <div className="mt-6">
+                <button
+                    onClick={onSave}
+                    disabled={isSaving}
+                    className="w-full sm:w-auto sm:float-right flex items-center justify-center gap-2 font-semibold bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition-colors shadow disabled:opacity-60"
+                >
+                    {isSaving ? <Spinner className="w-5 h-5" /> : <Save className="w-5 h-5" />}
+                    {isSaving ? 'Saving...' : (user ? 'Save Changes' : 'Save & Sign Up')}
                 </button>
             </div>
         </div>
     );
 }
 
-// --- StrategyPanel: margin targets, competitor analysis, profit stats ---
+// --- Strategy Panel ---
 function StrategyPanel({ product, onPriceChange, onProductChange }) {
-    // Destructure product fields for calculations
     const { landed, ship, pack, feePct, feeFlat, price, competitorPrice } = product;
     const totalCost = landed + ship + pack;
-    
-    // Calculate profit for a given price
     const calculateProfit = (p) => p - totalCost - (p * (feePct / 100) + feeFlat);
     const profit = calculateProfit(price);
 
-    // Calculate price for a target margin
     const priceForMargin = (targetMargin) => {
       const f = feePct / 100;
       const denom = 1 - f - targetMargin;
@@ -428,34 +475,32 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
       return roundNickel((totalCost + feeFlat) / denom);
     };
 
-    // When margin button is clicked, set price for that margin
     const handleMarginButtonClick = (margin) => {
         const targetPrice = priceForMargin(margin);
-        if(!isNaN(targetPrice)) {
-            onPriceChange(targetPrice);
-        }
+        if (!isNaN(targetPrice)) onPriceChange(targetPrice);
     };
-    
-    // List of margin targets
+
     const margins = [0.10, 0.15, 0.20, 0.25, 0.33, 0.40, 0.50, 0.75];
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-md">
+            <div className="md:col-span-3 bg-white p-4 sm:p-6 rounded-xl shadow-md">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Quick margin target buttons */}
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-1">Quick Targets</h3>
                         <p className="text-sm text-slate-500 mb-4">Instantly set price for a target margin.</p>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                             {margins.map(margin => (
-                                <button key={margin} onClick={() => handleMarginButtonClick(margin)} className="text-sm font-semibold p-3 bg-slate-100 rounded-lg hover:bg-teal-100 hover:text-teal-800 transition-colors">
+                                <button
+                                    key={margin}
+                                    onClick={() => handleMarginButtonClick(margin)}
+                                    className="text-sm font-semibold py-3 bg-slate-100 rounded-lg hover:bg-emerald-100 hover:text-emerald-800 transition-colors"
+                                >
                                     {Math.round(margin * 100)}%
                                 </button>
                             ))}
                         </div>
                     </div>
-                    {/* Competitor price analysis */}
                     <div>
                         <h3 className="text-lg font-bold text-slate-800 mb-1">Strategic Analysis</h3>
                         <p className="text-sm text-slate-500 mb-4">Analyze and act on competitor pricing.</p>
@@ -466,31 +511,15 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
                                     You are currently <span className={`font-bold ${price < competitorPrice ? 'text-green-600' : 'text-red-600'}`}>{fmtUSD(Math.abs(price - competitorPrice))} {price < competitorPrice ? 'below' : 'above'}</span> them.
                                 </div>
                                 <div className="space-y-2">
-                                    <StrategyButton
-                                        label="Price to Beat"
-                                        newPrice={competitorPrice - 0.50}
-                                        profit={calculateProfit(competitorPrice - 0.50)}
-                                        onClick={onPriceChange}
-                                    />
-                                    <StrategyButton
-                                        label="Price to Match"
-                                        newPrice={competitorPrice}
-                                        profit={calculateProfit(competitorPrice)}
-                                        onClick={onPriceChange}
-                                    />
-                                    <StrategyButton
-                                        label="Price for Premium"
-                                        newPrice={competitorPrice * 1.05}
-                                        profit={calculateProfit(competitorPrice * 1.05)}
-                                        onClick={onPriceChange}
-                                    />
+                                    <StrategyButton label="Price to Beat" newPrice={competitorPrice - 0.50} profit={calculateProfit(competitorPrice - 0.50)} onClick={onPriceChange} />
+                                    <StrategyButton label="Price to Match" newPrice={competitorPrice} profit={calculateProfit(competitorPrice)} onClick={onPriceChange} />
+                                    <StrategyButton label="Price for Premium" newPrice={competitorPrice * 1.05} profit={calculateProfit(competitorPrice * 1.05)} onClick={onPriceChange} />
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
-            {/* Profit stats cards */}
             <StatCard label="Net Profit" value={fmtUSD(profit)} isPositive={profit >= 0} />
             <StatCard label="Net Margin" value={`${(price > 0 ? (profit / price) * 100 : 0).toFixed(1)}%`} isPositive={profit >= 0} />
             <StatCard label="Breakeven Price" value={fmtUSD((1 - feePct / 100) > 0 ? (totalCost + feeFlat) / (1 - feePct / 100) : Infinity)} />
@@ -498,11 +527,11 @@ function StrategyPanel({ product, onPriceChange, onProductChange }) {
     );
 }
 
-// --- Button for strategy actions (beat, match, premium) ---
+// --- Strategy Button ---
 function StrategyButton({ label, newPrice, profit, onClick }) {
     const roundedPrice = roundNickel(newPrice);
     return (
-        <button onClick={() => onClick(roundedPrice)} className="w-full text-left p-3 bg-slate-100 rounded-lg hover:bg-teal-100 hover:text-teal-800 transition-colors">
+        <button onClick={() => onClick(roundedPrice)} className="w-full text-left p-3 bg-slate-100 rounded-lg hover:bg-emerald-100 hover:text-emerald-800 transition-colors">
             <div className="font-semibold">{label}</div>
             <div className="text-xs text-slate-600">
                 Set Price: <span className="font-bold">{fmtUSD(roundedPrice)}</span> | Profit: <span className="font-bold">{fmtUSD(profit)}</span>
@@ -511,20 +540,28 @@ function StrategyButton({ label, newPrice, profit, onClick }) {
     );
 }
 
-// --- Input component for all form fields ---
+// --- Input ---
 const Input = React.forwardRef(({ id, label, type = "text", value, onChange, icon, step }, ref) => {
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-slate-600 mb-1">{label}</label>
       <div className="relative">
         {icon && <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">{icon}</span>}
-        <input ref={ref} type={type} id={id} value={value} onChange={onChange} step={step || (type === 'number' ? '0.01' : undefined)} className={`w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 transition ${icon ? 'pl-8' : 'pl-3'}`} />
+        <input
+          ref={ref}
+          type={type}
+          id={id}
+          value={value}
+          onChange={onChange}
+          step={step || (type === 'number' ? '0.01' : undefined)}
+          className={`w-full py-3 px-3 border border-slate-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 transition ${icon ? 'pl-8' : 'pl-3'}`}
+        />
       </div>
     </div>
   );
 });
 
-// --- StatCard: shows profit, margin, breakeven stats ---
+// --- Stat Card ---
 function StatCard({ label, value, isPositive }) {
     const valueColor = isPositive === true ? 'text-green-600' : isPositive === false ? 'text-red-500' : 'text-slate-800';
     return (
@@ -535,18 +572,29 @@ function StatCard({ label, value, isPositive }) {
     );
 }
 
-// --- AuthModal: handles login and signup ---
+// --- Auth Modal ---
 function AuthModal({ onClose }) {
-    // State for email, password, login/signup toggle, and error messages
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Handle form submit for login or signup
+    // Map Firebase error codes to friendly messages
+    const friendlyError = (err) => {
+        const code = err.code || '';
+        if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Incorrect email or password.';
+        if (code === 'auth/email-already-in-use') return 'An account with this email already exists.';
+        if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
+        if (code === 'auth/invalid-email') return 'Please enter a valid email address.';
+        if (code === 'auth/network-request-failed') return 'No connection. Check your internet and try again.';
+        return err.message.replace('Firebase: ', '').replace(/\s*\(auth\/[^)]+\)\.?/, '');
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setIsSubmitting(true);
         try {
             if (isLogin) {
                 await signInWithEmailAndPassword(auth, email, password);
@@ -555,29 +603,40 @@ function AuthModal({ onClose }) {
             }
             onClose();
         } catch (err) {
-            setError(err.message.replace('Firebase: ', ''));
+            setError(friendlyError(err));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md relative">
-                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-md relative">
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+                    <X className="w-6 h-6" />
+                </button>
                 <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">{isLogin ? 'Log In' : 'Create Account'}</h2>
-                <p className="text-center text-slate-500 mb-6">to save your products and calculations.</p>
+                <p className="text-center text-slate-500 mb-6 text-sm">Save your products and calculations.</p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input id="email" label="Email Address" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                     <Input id="password" label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-                    {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                    <button type="submit" className="w-full font-semibold bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition-colors shadow">{isLogin ? 'Log In' : 'Sign Up'}</button>
+                    {error && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</p>}
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full flex items-center justify-center gap-2 font-semibold bg-emerald-600 text-white py-3 rounded-lg hover:bg-emerald-700 transition-colors shadow disabled:opacity-60"
+                    >
+                        {isSubmitting && <Spinner className="w-5 h-5" />}
+                        {isSubmitting ? 'Please wait...' : (isLogin ? 'Log In' : 'Sign Up')}
+                    </button>
                 </form>
                 <p className="text-center text-sm text-slate-500 mt-6">
-                    {isLogin ? "Don't have an account?  Make one!" : "Already have an account? Welcome Back!"}
-                    <button onClick={() => setIsLogin(!isLogin)} className="font-semibold text-teal-600 hover:underline ml-1">{isLogin ? 'Sign Up' : 'Log In'}</button>
+                    {isLogin ? "Don't have an account?" : "Already have an account?"}
+                    <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="font-semibold text-emerald-600 hover:underline ml-1">
+                        {isLogin ? 'Sign Up' : 'Log In'}
+                    </button>
                 </p>
             </div>
         </div>
     );
 }
-
-// --- End of file ---
