@@ -204,6 +204,7 @@ export default function App() {
       margin: parseFloat(margin.toFixed(2)),
       feePct,
       feeFlat,
+      status: 'listed',
       loggedAt: serverTimestamp(),
     };
     try {
@@ -224,6 +225,16 @@ export default function App() {
       setDealHistory(prev => prev.filter(d => d.id !== dealId));
     } catch (err) {
       showToast('Failed to delete entry.', 'error');
+    }
+  };
+
+  const handleUpdateDealStatus = async (dealId, newStatus) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid, 'dealHistory', dealId), { status: newStatus });
+      setDealHistory(prev => prev.map(d => d.id === dealId ? { ...d, status: newStatus } : d));
+    } catch (err) {
+      showToast('Failed to update status.', 'error');
     }
   };
 
@@ -366,6 +377,7 @@ export default function App() {
           <DealHistory
             dealHistory={dealHistory}
             onDeleteDeal={handleDeleteDeal}
+            onUpdateStatus={handleUpdateDealStatus}
             user={user}
             onLoginClick={() => setAuthModalOpen(true)}
           />
@@ -1035,14 +1047,22 @@ function StatCard({ label, value, isPositive }) {
 }
 
 // --- Deal History ---
-function DealHistory({ dealHistory, onDeleteDeal, user, onLoginClick }) {
+const STATUS_META = {
+    listed: { label: 'Listed',  pill: 'bg-sky-100 text-sky-700',          active: 'bg-sky-600 text-white border-sky-600' },
+    sold:   { label: 'Sold',    pill: 'bg-emerald-100 text-emerald-700',   active: 'bg-emerald-600 text-white border-emerald-600' },
+    passed: { label: 'Passed',  pill: 'bg-slate-100 text-slate-500',       active: 'bg-slate-500 text-white border-slate-500' },
+};
+
+function DealHistory({ dealHistory, onDeleteDeal, onUpdateStatus, user, onLoginClick }) {
     const [pendingDeleteId, setPendingDeleteId] = useState(null);
+    const [activeStatusId, setActiveStatusId] = useState(null);
+
     if (!user) {
         return (
             <div className="max-w-lg mx-auto bg-white rounded-xl shadow-md p-10 text-center">
                 <p className="text-4xl mb-3">📋</p>
                 <p className="text-lg font-bold text-slate-800 mb-1">Your deal log lives here</p>
-                <p className="text-slate-500 text-sm mb-6">Every calculation you save gets logged automatically — platform, price, profit, date.</p>
+                <p className="text-slate-500 text-sm mb-6">Log deals and tag them as Listed, Sold, or Passed. Track your win rate over time.</p>
                 <button
                     onClick={onLoginClick}
                     className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors shadow"
@@ -1063,32 +1083,45 @@ function DealHistory({ dealHistory, onDeleteDeal, user, onLoginClick }) {
         );
     }
 
-    const totalProfit = dealHistory.reduce((s, d) => s + (d.profit || 0), 0);
-    const avgMargin = dealHistory.reduce((s, d) => s + (d.margin || 0), 0) / dealHistory.length;
-    const winners = dealHistory.filter(d => d.margin >= 20).length;
+    const soldDeals   = dealHistory.filter(d => d.status === 'sold');
+    const passedDeals = dealHistory.filter(d => d.status === 'passed');
+    const decidedCount = soldDeals.length + passedDeals.length;
+    const winRate = decidedCount > 0 ? (soldDeals.length / decidedCount) * 100 : null;
+    const realizedProfit = soldDeals.reduce((s, d) => s + (d.profit || 0), 0);
+    const avgSoldMargin = soldDeals.length > 0
+        ? soldDeals.reduce((s, d) => s + (d.margin || 0), 0) / soldDeals.length
+        : null;
 
     return (
         <div className="max-w-2xl mx-auto space-y-5">
             {/* Aggregate stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white rounded-xl shadow-md p-4 text-center">
-                    <p className="text-xs font-medium text-slate-500 mb-1">Deals Logged</p>
+                    <p className="text-xs font-medium text-slate-500 mb-1">Logged</p>
                     <p className="text-3xl font-bold text-slate-800">{dealHistory.length}</p>
                 </div>
                 <div className="bg-white rounded-xl shadow-md p-4 text-center">
-                    <p className="text-xs font-medium text-slate-500 mb-1">Total Profit</p>
-                    <p className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtUSD(totalProfit)}</p>
+                    <p className="text-xs font-medium text-slate-500 mb-1">Sold</p>
+                    <p className="text-3xl font-bold text-emerald-600">{soldDeals.length}</p>
                 </div>
                 <div className="bg-white rounded-xl shadow-md p-4 text-center">
-                    <p className="text-xs font-medium text-slate-500 mb-1">Avg Margin</p>
-                    <p className="text-3xl font-bold text-slate-800">{avgMargin.toFixed(1)}%</p>
+                    <p className="text-xs font-medium text-slate-500 mb-1">Win Rate</p>
+                    <p className="text-3xl font-bold text-slate-800">
+                        {winRate !== null ? `${Math.round(winRate)}%` : '—'}
+                    </p>
+                </div>
+                <div className="bg-white rounded-xl shadow-md p-4 text-center">
+                    <p className="text-xs font-medium text-slate-500 mb-1">Realized Profit</p>
+                    <p className={`text-3xl font-bold ${realizedProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {fmtUSD(realizedProfit)}
+                    </p>
                 </div>
             </div>
 
-            {/* Winners callout */}
-            {winners > 0 && (
+            {/* Insight callout */}
+            {soldDeals.length > 0 && avgSoldMargin !== null && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-700 font-medium text-center">
-                    🏆 {winners} of your {dealHistory.length} deals hit 20%+ margin
+                    🏆 {soldDeals.length} sold · avg margin {avgSoldMargin.toFixed(1)}%{winRate !== null ? ` · ${Math.round(winRate)}% win rate` : ''}
                 </div>
             )}
 
@@ -1098,51 +1131,84 @@ function DealHistory({ dealHistory, onDeleteDeal, user, onLoginClick }) {
                     const rawDate = deal.loggedAt?.toDate ? deal.loggedAt.toDate() : new Date();
                     const dateStr = rawDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                     const marginColor = deal.margin >= 20 ? 'text-emerald-600' : deal.margin >= 10 ? 'text-amber-600' : 'text-red-500';
+                    const status = deal.status || 'listed';
+                    const statusMeta = STATUS_META[status];
+                    const isPickerOpen = activeStatusId === deal.id;
 
                     return (
-                        <div key={deal.id} className="flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors">
-                            {/* Margin indicator dot */}
-                            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${deal.margin >= 20 ? 'bg-emerald-500' : deal.margin >= 10 ? 'bg-amber-400' : 'bg-red-400'}`} />
+                        <div key={deal.id} className="p-4 hover:bg-slate-50 transition-colors">
+                            <div className="flex items-center gap-3">
+                                {/* Margin dot */}
+                                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${deal.margin >= 20 ? 'bg-emerald-500' : deal.margin >= 10 ? 'bg-amber-400' : 'bg-red-400'}`} />
 
-                            {/* Item info */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="font-semibold text-slate-800 truncate">{deal.itemName}</p>
-                                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full flex-shrink-0">{deal.platformName}</span>
+                                {/* Item info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="font-semibold text-slate-800 truncate">{deal.itemName}</p>
+                                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full flex-shrink-0">{deal.platformName}</span>
+                                        {/* Status badge */}
+                                        <button
+                                            onClick={() => setActiveStatusId(isPickerOpen ? null : deal.id)}
+                                            className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 transition-colors ${statusMeta.pill} hover:opacity-80`}
+                                        >
+                                            {statusMeta.label} ▾
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">{dateStr} · {fmtUSD(deal.salePrice)}</p>
                                 </div>
-                                <p className="text-xs text-slate-400 mt-0.5">{dateStr} · listed at {fmtUSD(deal.salePrice)}</p>
-                            </div>
 
-                            {/* Profit + margin */}
-                            <div className="text-right flex-shrink-0">
-                                <p className={`font-bold ${deal.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtUSD(deal.profit)}</p>
-                                <p className={`text-xs font-semibold ${marginColor}`}>{deal.margin?.toFixed(1)}%</p>
-                            </div>
+                                {/* Profit + margin */}
+                                <div className="text-right flex-shrink-0">
+                                    <p className={`font-bold ${deal.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmtUSD(deal.profit)}</p>
+                                    <p className={`text-xs font-semibold ${marginColor}`}>{deal.margin?.toFixed(1)}%</p>
+                                </div>
 
-                            {/* Delete — two-step confirm */}
-                            {pendingDeleteId === deal.id ? (
-                                <div className="flex items-center gap-1 flex-shrink-0">
+                                {/* Delete — two-step confirm */}
+                                {pendingDeleteId === deal.id ? (
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button
+                                            onClick={() => { onDeleteDeal(deal.id); setPendingDeleteId(null); }}
+                                            className="text-xs font-semibold text-red-500 hover:text-red-700 px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition-colors"
+                                        >
+                                            Delete
+                                        </button>
+                                        <button
+                                            onClick={() => setPendingDeleteId(null)}
+                                            className="text-slate-400 hover:text-slate-600 p-1 transition-colors"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
                                     <button
-                                        onClick={() => { onDeleteDeal(deal.id); setPendingDeleteId(null); }}
-                                        className="text-xs font-semibold text-red-500 hover:text-red-700 px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition-colors"
+                                        onClick={() => setPendingDeleteId(deal.id)}
+                                        className="text-slate-300 hover:text-red-400 transition-colors p-1 flex-shrink-0"
+                                        title="Remove from history"
                                     >
-                                        Delete
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
+                                )}
+                            </div>
+
+                            {/* Status picker — inline, appears below row */}
+                            {isPickerOpen && (
+                                <div className="mt-2.5 ml-5 flex items-center gap-2 flex-wrap">
+                                    {Object.entries(STATUS_META).map(([key, meta]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => { onUpdateStatus(deal.id, key); setActiveStatusId(null); }}
+                                            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${status === key ? meta.active + ' border-transparent' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                                        >
+                                            {meta.label}
+                                        </button>
+                                    ))}
                                     <button
-                                        onClick={() => setPendingDeleteId(null)}
-                                        className="text-slate-400 hover:text-slate-600 p-1 transition-colors"
+                                        onClick={() => setActiveStatusId(null)}
+                                        className="text-slate-400 hover:text-slate-600 transition-colors"
                                     >
                                         <X className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
-                            ) : (
-                                <button
-                                    onClick={() => setPendingDeleteId(deal.id)}
-                                    className="text-slate-300 hover:text-red-400 transition-colors p-1 flex-shrink-0"
-                                    title="Remove from history"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
                             )}
                         </div>
                     );
